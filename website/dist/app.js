@@ -1,9 +1,9 @@
 'use strict';
 const state = { mode: 'noise', ambient: 12, eq: [0, 0, 0, 0, 0, 0] };
 const descriptions = {
-  noise: 'Noise canceling for deep work. Ambient sound for everything around you. Move between them in a click.',
-  eq: 'Five bands and Clear Bass put the finishing touch on your sound. Try a curve, then make it yours.',
-  scenes: 'Your favorite settings, together. The Mac app can apply scenes manually, on connection, on a schedule, or when an app opens.'
+  noise: 'Switch noise canceling on or off, or adjust how much ambient sound passes through the headphones.',
+  eq: 'Adjust five EQ bands and Clear Bass on XM3 / XM4. Choose a preset or set each band individually.',
+  scenes: 'Save a combination of headphone settings. Apply it manually, on connection, on a schedule, or when an app opens.'
 };
 const names = { noise: 'Noise canceling', ambient: 'Ambient sound', off: 'Noise control off' };
 const result = message => { document.getElementById('demo-result').textContent = message; };
@@ -14,7 +14,7 @@ function setMode(mode, announce = true) {
     button.classList.toggle('selected', active); button.setAttribute('aria-pressed', String(active));
   });
   document.getElementById('mode-label').textContent = names[mode];
-  document.getElementById('hero-mode').textContent = {noise:'Your world, turned down.',ambient:'A little more of the outside.',off:'Just you and your music.'}[mode];
+  document.getElementById('hero-mode').textContent = {noise:'Noise canceling selected',ambient:'Ambient sound selected',off:'Noise control off'}[mode];
   if (announce) result(`Preview: ${names[mode]}${mode === 'ambient' ? ` · level ${state.ambient}` : ''}.`);
 }
 function setTab(name, focus = false) {

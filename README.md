@@ -1,6 +1,6 @@
 # OpenXM
 
-**Find your quiet. Free, open-source Sony headphone controls for Mac.**
+**Control Sony XM headphones from your Mac. Free and open source.**
 
 A native SwiftUI app with local Bluetooth control, noise canceling, ambient sound, EQ, saved scenes, and a compact menu bar. No account, activation, analytics, or paid feature unlocks.
 
@@ -31,10 +31,6 @@ Requires **macOS 15+**, Apple silicon or Intel, and compatible headphones paired
 3. Connect the headphones in macOS Bluetooth settings, open OpenXM, and allow Bluetooth access.
 
 Community builds are **ad-hoc signed, not Apple notarized**. macOS may block a downloaded app. Building locally is the supported alternative; do not disable system security settings. Developer ID signing requires a maintainer's own Apple credentials, which are not included.
-
-### Upgrading from SoundConnect 0.1.0
-
-Quit SoundConnect, install **OpenXM.app**, then remove the old **SoundConnect.app** copy. Your scenes and preferences carry over. If Open at Login was enabled, turn it off in the old app before replacing it and enable it again in OpenXM.
 
 ## Build from source
 
@@ -101,7 +97,7 @@ Closing the window keeps OpenXM in the menu bar when enabled. Use ⌘Q or Quit t
 
 ## Privacy
 
-Headphone communication is local Bluetooth. Scenes live in `~/Library/Application Support/SoundConnect/scenes.json`; preferences use the separate `io.github.pgerhardt.SoundConnect` defaults domain. These identifiers are retained from SoundConnect 0.1.0 so the OpenXM rebrand preserves existing settings and scenes. This fork does not overwrite the original upstream app's preferences or scenes.
+Headphone communication is local Bluetooth. Scenes live in `~/Library/Application Support/SoundConnect/scenes.json`; preferences use the separate `io.github.pgerhardt.SoundConnect` defaults domain. The storage names are internal identifiers from early development. This fork does not overwrite the original upstream app's preferences or scenes.
 
 Update checks are **off by default**. If enabled, the app reads the public GitHub Releases API for `pgerhardt/openxm` at most daily, without sending headphone data. Manual update checks use the same endpoint. No automatic download or installation occurs.
 
