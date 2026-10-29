@@ -1,0 +1,50 @@
+name: macOS app
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    name: macOS (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Test protocol, preview, playback, and updates
+        run: ./scripts/test.sh
+      - name: Build and package
+        run: ./scripts/package.sh
+      - name: Verify app and checksum
+        run: |
+          codesign --verify --deep --strict build/SoundConnect.app
+          cd build
+          shasum -a 256 -c SoundConnect-macos-${{ matrix.arch }}.zip.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: SoundConnect-macos-${{ matrix.arch }}
+          path: |
+            build/SoundConnect-macos-${{ matrix.arch }}.zip
+            build/SoundConnect-macos-${{ matrix.arch }}.zip.sha256
+          if-no-files-found: error
+  website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: python3 scripts/check-website.py
+      - run: node --check website/dist/app.js
