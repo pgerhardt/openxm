@@ -140,14 +140,14 @@ struct MenuBarView: View {
                 Button {
                     updates.download(release)
                 } label: {
-                    Label("Download SoundConnect \(release.version)", systemImage: "arrow.down.circle.fill")
+                    Label("Download OpenXM \(release.version)", systemImage: "arrow.down.circle.fill")
                         .font(.system(size: 12, weight: .medium))
                 }
                 .buttonStyle(.borderless)
                 .foregroundStyle(Theme.accent)
             }
             HStack {
-                Button("Open SoundConnect") {
+                Button("Open OpenXM") {
                     // The app drops its Dock icon while only the menu bar item is open; bring it back with the window.
                     NSApp.setActivationPolicy(.regular)
                     openWindow(id: "main")
@@ -228,7 +228,7 @@ struct MenuBarIcon: View {
             .font(.system(size: 18, weight: .medium))
             .imageScale(.large)
             .opacity(controller.isConnected ? 1 : 0.6)
-            .accessibilityLabel(controller.isConnected ? "SoundConnect, \(controller.state.noise?.mode.title ?? "connected")" : "SoundConnect, not connected")
+            .accessibilityLabel(controller.isConnected ? "OpenXM, \(controller.state.noise?.mode.title ?? "connected")" : "OpenXM, not connected")
     }
 }
 

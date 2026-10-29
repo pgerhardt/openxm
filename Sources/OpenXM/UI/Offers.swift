@@ -78,7 +78,7 @@ struct LoginItemOffer: View {
         let shown = visible && loginItem.shouldOffer
         ZStack {
             if shown {
-                FloatingOffer(symbol: "power", title: "Open SoundConnect at login?",
+                FloatingOffer(symbol: "power", title: "Open OpenXM at login?",
                               message: "It starts quietly in the menu bar, so your controls and scene automations are ready when you are. You can change this in Settings.") {
                     Button("Not Now") { loginItem.answerOffer() }
                     Button("Open at Login") { accept() }.modifier(PrimaryOfferButton())
@@ -98,12 +98,12 @@ struct LoginItemOffer: View {
         loginItem.setEnabled(true)
         switch loginItem.status {
         case .enabled:
-            controller.showToast(.info, "SoundConnect will open at login.")
+            controller.showToast(.info, "OpenXM will open at login.")
         case .requiresApproval:
-            controller.showToast(.warning, "Allow SoundConnect in System Settings to finish turning on Open at Login.")
+            controller.showToast(.warning, "Allow OpenXM in System Settings to finish turning on Open at Login.")
             loginItem.openSystemSettings()
         case .disabled, .unavailable:
-            controller.showToast(.error, loginItem.error ?? "Open at Login isn’t available for this copy of SoundConnect.")
+            controller.showToast(.error, loginItem.error ?? "Open at Login isn’t available for this copy of OpenXM.")
         }
     }
 }
@@ -116,7 +116,7 @@ struct UpdateOffer: View {
         let release = updates.offered
         ZStack {
             if let release {
-                FloatingOffer(symbol: "arrow.down.circle", title: "SoundConnect \(release.version) is available",
+                FloatingOffer(symbol: "arrow.down.circle", title: "OpenXM \(release.version) is available",
                               message: "You have \(updates.currentVersion). Download it from the GitHub release page, then replace the app in your Applications folder.") {
                     Button("Skip This Version") { updates.skip(release) }
                     Button("Later") { updates.dismissOffer() }

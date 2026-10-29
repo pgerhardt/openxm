@@ -7,7 +7,7 @@ import Foundation
 /// ```
 /// Checksum is the 8-bit sum of every unescaped byte before it. 0x3C/0x3D/0x3E inside the body are escaped
 /// as 0x3D followed by the byte with bit 4 cleared (0x2C/0x2D/0x2E).
-/// Provenance: matches SoundConnect's tandem framing and the MIT libmdr implementation (see the README credits).
+/// Provenance: matches Sony Sound Connect's tandem framing and the MIT libmdr implementation (see the README credits).
 enum MDRDataType: UInt8, Sendable, CustomStringConvertible {
     case data = 0x00
     case ack = 0x01

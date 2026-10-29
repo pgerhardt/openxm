@@ -3,7 +3,7 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-// Original, code-drawn SoundConnect identity. No fonts, downloads, or raster source needed.
+// Original, code-drawn OpenXM identity. No fonts, downloads, or raster source needed.
 func icon(size: Int) -> CGImage {
     let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
         space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
@@ -29,7 +29,7 @@ func icon(size: Int) -> CGImage {
 }
 let args = CommandLine.arguments
 guard args.count == 3, args[1] == "icon" else {
-    fputs("Usage: SoundConnectArtwork icon <output.iconset>\n", stderr); exit(2)
+    fputs("Usage: OpenXMArtwork icon <output.iconset>\n", stderr); exit(2)
 }
 let output = URL(fileURLWithPath: args[2], isDirectory: true)
 try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)

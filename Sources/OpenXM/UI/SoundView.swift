@@ -325,7 +325,7 @@ struct SoundQualityCard: View {
             Button(value.title) { controller.apply(.connectionPriority(value)) }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("The headphones will disconnect briefly and reconnect. SoundConnect reconnects automatically.")
+            Text("The headphones will disconnect briefly and reconnect. OpenXM reconnects automatically.")
         }
     }
 

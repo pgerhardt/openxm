@@ -30,15 +30,15 @@ jobs:
         run: ./scripts/package.sh
       - name: Verify app and checksum
         run: |
-          codesign --verify --deep --strict build/SoundConnect.app
+          codesign --verify --deep --strict build/OpenXM.app
           cd build
-          shasum -a 256 -c SoundConnect-macos-${{ matrix.arch }}.zip.sha256
+          shasum -a 256 -c OpenXM-macos-${{ matrix.arch }}.zip.sha256
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: SoundConnect-macos-${{ matrix.arch }}
+          name: OpenXM-macos-${{ matrix.arch }}
           path: |
-            build/SoundConnect-macos-${{ matrix.arch }}.zip
-            build/SoundConnect-macos-${{ matrix.arch }}.zip.sha256
+            build/OpenXM-macos-${{ matrix.arch }}.zip
+            build/OpenXM-macos-${{ matrix.arch }}.zip.sha256
           if-no-files-found: error
   website:
     runs-on: ubuntu-latest

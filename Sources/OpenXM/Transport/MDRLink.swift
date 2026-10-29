@@ -28,7 +28,7 @@ struct TrafficEntry: Identifiable, Sendable {
 
 /// Reliable request layer over the MDR framing.
 ///
-/// Rules (SoundConnect tandem behaviour, confirmed on WH-1000XM3/XM4 captures):
+/// Rules (Sony Sound Connect tandem behaviour, confirmed on WH-1000XM3/XM4 captures):
 /// * Exactly one host command is in flight. It carries the current sequence bit; the headset ACKs with the
 ///   other bit, which becomes the next command's sequence. A missing ACK is retried with the same bit.
 ///   If retries are exhausted the sequence state is unknowable, so the link is torn down (the controller

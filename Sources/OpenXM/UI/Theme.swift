@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// SoundConnect: graphite surfaces, soft white type, and a sea-glass accent.
+/// OpenXM: graphite surfaces, soft white type, and a sea-glass accent.
 enum Theme {
     // Surfaces (neutral charcoal, a hair of blue so lavender sits naturally on it)
     static let canvasTop = Color(red: 0.090, green: 0.090, blue: 0.106)
@@ -207,7 +207,7 @@ struct Chip: View {
     }
 }
 
-/// Large circular mode button, after SoundConnect's noise-control and listening-mode rows.
+/// Large circular mode button, after Sony Sound Connect's noise-control and listening-mode rows.
 struct ModeButton: View {
     let title: String
     let symbol: String

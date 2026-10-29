@@ -1,14 +1,14 @@
-# SoundConnect
+# OpenXM
 
 **Find your quiet. Free, open-source Sony headphone controls for Mac.**
 
 A native SwiftUI app with local Bluetooth control, noise canceling, ambient sound, EQ, saved scenes, and a compact menu bar. No account, activation, analytics, or paid feature unlocks.
 
-[Website](https://pgerhardt.github.io/soundconnect/) · [Download](https://github.com/pgerhardt/soundconnect/releases/latest) · [Compatibility](docs/COMPATIBILITY.md) · [Contribute](CONTRIBUTING.md)
+[Website](https://pgerhardt.github.io/openxm/) · [Download](https://github.com/pgerhardt/openxm/releases/latest) · [Compatibility](docs/COMPATIBILITY.md) · [Contribute](CONTRIBUTING.md)
 
 > Independent community fork of [Open Sound Connect by rolottr](https://github.com/rolottr/open-sound-connect), with its MIT license and credits preserved. Not affiliated with Sony, Apple, or the upstream distribution.
 
-![SoundConnect native Mac app, shown with clearly labeled sample data](docs/screenshots/app.png)
+![OpenXM native Mac app, shown with clearly labeled sample data](docs/screenshots/app.png)
 
 ## What it does
 
@@ -26,21 +26,25 @@ The native app talks to the headset; the website's interactive controls are an i
 
 Requires **macOS 15+**, Apple silicon or Intel, and compatible headphones paired in System Settings → Bluetooth.
 
-1. Download the ZIP matching your Mac from [Releases](https://github.com/pgerhardt/soundconnect/releases/latest): `arm64` for Apple silicon or `x86_64` for Intel.
-2. Unzip it and move **SoundConnect.app** into Applications.
-3. Connect the headphones in macOS Bluetooth settings, open SoundConnect, and allow Bluetooth access.
+1. Download the ZIP matching your Mac from [Releases](https://github.com/pgerhardt/openxm/releases/latest): `arm64` for Apple silicon or `x86_64` for Intel.
+2. Unzip it and move **OpenXM.app** into Applications.
+3. Connect the headphones in macOS Bluetooth settings, open OpenXM, and allow Bluetooth access.
 
 Community builds are **ad-hoc signed, not Apple notarized**. macOS may block a downloaded app. Building locally is the supported alternative; do not disable system security settings. Developer ID signing requires a maintainer's own Apple credentials, which are not included.
+
+### Upgrading from SoundConnect 0.1.0
+
+Quit SoundConnect, install **OpenXM.app**, then remove the old **SoundConnect.app** copy. Your scenes and preferences carry over. If Open at Login was enabled, turn it off in the old app before replacing it and enable it again in OpenXM.
 
 ## Build from source
 
 Install Xcode or the Xcode Command Line Tools (`xcode-select --install`), then:
 
 ```sh
-git clone https://github.com/pgerhardt/soundconnect.git
-cd soundconnect
+git clone https://github.com/pgerhardt/openxm.git
+cd openxm
 ./scripts/build.sh
-open build/SoundConnect.app
+open build/OpenXM.app
 ```
 
 No third-party Swift packages or build-time downloads. Swift 6+, SwiftPM, Apple system frameworks, and a small BSD-licensed vendored media helper. The build script makes the bundle, draws the icon, includes licenses, and ad-hoc signs it. Launch the `.app`, rather than the executable inside it, so Bluetooth permission belongs to the app.
@@ -57,7 +61,7 @@ CONFIG=debug ./scripts/build.sh    # Debug bundle
 ### Explore without headphones
 
 ```sh
-open -n build/SoundConnect.app --args --demo
+open -n build/OpenXM.app --args --demo
 ```
 
 The persistent **PREVIEW · SAMPLE DATA** banner identifies the built-in sample. Headphone writes, media controls, and scene automation are disabled. Quit and reopen normally to connect. Local scene and preference edits still save to your Mac.
@@ -93,26 +97,26 @@ Tests and a successful build do **not** establish physical-headphone compatibili
 | ⌃⌘1–⌃⌘9 | Apply a scene |
 | ⌘, | Preferences |
 
-Closing the window keeps SoundConnect in the menu bar when enabled. Use ⌘Q or Quit to stop it and its automations.
+Closing the window keeps OpenXM in the menu bar when enabled. Use ⌘Q or Quit to stop it and its automations.
 
 ## Privacy
 
-Headphone communication is local Bluetooth. Scenes live in `~/Library/Application Support/SoundConnect/scenes.json`; preferences use the separate `io.github.pgerhardt.SoundConnect` defaults domain. This fork does not overwrite the original app's preferences or scenes.
+Headphone communication is local Bluetooth. Scenes live in `~/Library/Application Support/SoundConnect/scenes.json`; preferences use the separate `io.github.pgerhardt.SoundConnect` defaults domain. These identifiers are retained from SoundConnect 0.1.0 so the OpenXM rebrand preserves existing settings and scenes. This fork does not overwrite the original upstream app's preferences or scenes.
 
-Update checks are **off by default**. If enabled, the app reads the public GitHub Releases API for `pgerhardt/soundconnect` at most daily, without sending headphone data. Manual update checks use the same endpoint. No automatic download or installation occurs.
+Update checks are **off by default**. If enabled, the app reads the public GitHub Releases API for `pgerhardt/openxm` at most daily, without sending headphone data. Manual update checks use the same endpoint. No automatic download or installation occurs.
 
 Now Playing reads local macOS metadata with the bundled MediaRemote Adapter; it stores no listening history. The helper uses a private macOS interface and may break after OS updates. Diagnostics can contain Bluetooth addresses and media metadata: redact before sharing.
 
 ## Troubleshooting
 
 - Connect the headphones to macOS first; audio and the app's RFCOMM control connection are separate.
-- If Bluetooth was denied, enable SoundConnect in System Settings → Privacy & Security → Bluetooth, then reopen.
+- If Bluetooth was denied, enable OpenXM in System Settings → Privacy & Security → Bluetooth, then reopen.
 - Close other headphone control apps if the control channel is busy.
 - Check Activity when a setting is unavailable or a write fails. Do not interpret an unconfirmed change as success.
 - Use a read-only report when filing a hardware issue:
 
 ```sh
-open -n -W build/SoundConnect.app --args --probe --out "$HOME/Desktop/soundconnect-probe.txt"
+open -n -W build/OpenXM.app --args --probe --out "$HOME/Desktop/openxm-probe.txt"
 ```
 
 Close the regular instance first. Replay a report locally with `--replay /absolute/path/to/report.txt`; the replay banner clearly marks it as non-live. Do not post an unredacted report.

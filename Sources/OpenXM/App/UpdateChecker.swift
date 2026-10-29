@@ -17,7 +17,7 @@ final class UpdateChecker {
         case idle, checking, upToDate, available(Release), failed(String)
     }
 
-    static let repository = "pgerhardt/soundconnect"
+    static let repository = "pgerhardt/openxm"
     private static let interval: TimeInterval = 24 * 60 * 60
 
     private enum Key {
@@ -75,7 +75,7 @@ final class UpdateChecker {
         do {
             var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(Self.repository)/releases/latest")!)
             request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-            request.setValue("SoundConnect/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+            request.setValue("OpenXM/\(currentVersion)", forHTTPHeaderField: "User-Agent")
             request.timeoutInterval = 20
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
@@ -96,14 +96,14 @@ final class UpdateChecker {
         let alert = NSAlert()
         switch state {
         case .available(let release):
-            alert.messageText = "SoundConnect \(release.version) is available"
+            alert.messageText = "OpenXM \(release.version) is available"
             alert.informativeText = "You have \(currentVersion). Download the new version from its GitHub release page, then replace the app in your Applications folder."
             alert.addButton(withTitle: "Download")
             alert.addButton(withTitle: "Later")
             if alert.runModal() == .alertFirstButtonReturn { download(release) }
         case .upToDate:
             alert.messageText = "You’re up to date"
-            alert.informativeText = "SoundConnect \(currentVersion) is the latest version."
+            alert.informativeText = "OpenXM \(currentVersion) is the latest version."
             alert.runModal()
         case .failed(let message):
             alert.messageText = "Couldn’t check for updates"

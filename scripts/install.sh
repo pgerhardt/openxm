@@ -1,14 +1,14 @@
 #!/bin/zsh
-# Installs build/SoundConnect.app into ~/Applications and launches it (Dock + menu bar).
+# Installs build/OpenXM.app into ~/Applications and launches it (Dock + menu bar).
 #   scripts/install.sh                      install the existing build (builds if missing)
 #   scripts/install.sh --build              build first
 #   scripts/install.sh --pin-dock           also keep it in the Dock (one entry, never duplicated)
 set -euo pipefail
 
 ROOT=${0:A:h:h}
-SOURCE="$ROOT/build/SoundConnect.app"
+SOURCE="$ROOT/build/OpenXM.app"
 DEST_DIR="$HOME/Applications"
-DEST="$DEST_DIR/SoundConnect.app"
+DEST="$DEST_DIR/OpenXM.app"
 BUILD=0
 PIN=0
 for arg in "$@"; do
@@ -40,7 +40,7 @@ codesign --verify --strict "$DEST"
 
 if (( PIN )); then
   ENCODED="file://${DEST// /%20}/"
-  if defaults read com.apple.dock persistent-apps 2>/dev/null | grep -q "Applications/SoundConnect.app"; then
+  if defaults read com.apple.dock persistent-apps 2>/dev/null | grep -q "Applications/OpenXM.app"; then
     echo "==> Already in the Dock"
   else
     echo "==> Adding to the Dock"

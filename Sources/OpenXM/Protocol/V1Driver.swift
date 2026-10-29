@@ -231,7 +231,7 @@ final class V1Driver: HeadphoneDriver {
         case .equalizerBands(let bands, let clearBass):
             guard let cap = state.capabilities.equalizer else { throw DriverError.unsupported("Equalizer") }
             guard bands.count == cap.bandCount else { throw DriverError.malformed("band count") }
-            // SoundConnect sends band steps against "unspecified" (0xFF): they apply to the active
+            // Sony Sound Connect sends band steps against "unspecified" (0xFF): they apply to the active
             // editable preset (Manual / Custom). Never combine a preset change and steps in one frame.
             var steps: [UInt8] = []
             if cap.hasClearBass { steps.append(UInt8(clamping: (clearBass ?? state.equalizer?.clearBass ?? 0) + eqStepCenter)) }
@@ -313,7 +313,7 @@ final class V1Driver: HeadphoneDriver {
         }
     }
 
-    /// SoundConnect v30/c: slider 0 = NC (dual), 1 = wind (NC single), 2… = ambient level n-1 with NC off.
+    /// Sony Sound Connect v30/c: slider 0 = NC (dual), 1 = wind (NC single), 2… = ambient level n-1 with NC off.
     /// The NC/ASM setting-type bytes echo the headset's own capability reply.
     private func noisePayload(_ value: NoiseControl, capability: NoiseControlCapability, dragging: Bool) -> [UInt8] {
         let ncType = state.v1NcSettingType

@@ -1,8 +1,8 @@
 import AppKit
 import Foundation
 
-/// Headless hardware diagnostics: `SoundConnect.app/Contents/MacOS/SoundConnect --probe [--exercise] [--out FILE]`.
-/// Launch it through LaunchServices (`open -n -W "SoundConnect.app" --args --probe …`) so the app, not the
+/// Headless hardware diagnostics: `OpenXM.app/Contents/MacOS/OpenXM --probe [--exercise] [--out FILE]`.
+/// Launch it through LaunchServices (`open -n -W "OpenXM.app" --args --probe …`) so the app, not the
 /// terminal, is the Bluetooth-responsible process.
 ///
 /// * `--probe` connects, initializes, and writes identity, capabilities, every reported value and the full
@@ -24,14 +24,14 @@ final class ProbeRunner {
         if let index = arguments.firstIndex(of: "--out"), index + 1 < arguments.count {
             outputURL = URL(fileURLWithPath: arguments[index + 1])
         } else {
-            let logs = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/SoundConnect")
+            let logs = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/OpenXM")
             let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
             outputURL = logs.appendingPathComponent("probe-\(stamp).txt")
         }
     }
 
     func run() async -> Int32 {
-        say("SoundConnect probe \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "dev") — \(Date())")
+        say("OpenXM probe \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "dev") — \(Date())")
         say("Mode: \(exercise ? "read + reversible write/readback/restore" : "read-only")")
         controller.start()
 

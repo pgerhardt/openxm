@@ -239,7 +239,7 @@ struct ConnectivityCard: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The headphones restart their Bluetooth connection to apply this. SoundConnect reconnects automatically.")
+            Text("The headphones restart their Bluetooth connection to apply this. OpenXM reconnects automatically.")
         }
     }
 }
@@ -334,7 +334,7 @@ struct DeviceInfoCard: View {
                 if controller.canWrite {
                     Button("Refresh") { controller.refreshStatus() }
                     Button("Disconnect Controls") { controller.disconnect() }
-                        .help("Closes SoundConnect's control channel only; audio stays connected.")
+                        .help("Closes OpenXM's control channel only; audio stays connected.")
                 } else if let address = controller.selectedAddress, !controller.isReplay {
                     Button("Connect") { controller.connect(address: address, initiate: true) }
                 }
@@ -370,12 +370,12 @@ struct AppPreferencesCard: View {
     @AppStorage("showMenuBarExtra") private var showMenuBar = true
 
     var body: some View {
-        Card("SoundConnect", symbol: "macwindow") {
+        Card("OpenXM", symbol: "macwindow") {
             VStack(spacing: 14) {
                 SettingRow(symbol: "menubar.rectangle", title: "Show in Menu Bar",
                            detail: showMenuBar
-                               ? "Closing the window keeps SoundConnect running in the menu bar. Quit from there or with ⌘Q."
-                               : "Closing the window quits SoundConnect and stops scene automations.") {
+                               ? "Closing the window keeps OpenXM running in the menu bar. Quit from there or with ⌘Q."
+                               : "Closing the window quits OpenXM and stops scene automations.") {
                     Toggle("Show in Menu Bar", isOn: $showMenuBar).labelsHidden().toggleStyle(AccentToggleStyle())
                 }
                 RowDivider()
@@ -403,9 +403,9 @@ struct AppPreferencesCard: View {
         case .enabled:
             showMenuBar ? "Starts quietly in the menu bar when you log in." : "Opens when you log in."
         case .requiresApproval:
-            "Allow SoundConnect in System Settings → General → Login Items."
+            "Allow OpenXM in System Settings → General → Login Items."
         case .unavailable:
-            "Not available for this copy. Move SoundConnect to the Applications folder and open it from there."
+            "Not available for this copy. Move OpenXM to the Applications folder and open it from there."
         case .disabled:
             "Have your menu bar controls and scenes ready as soon as you log in."
         }

@@ -1,12 +1,12 @@
 import AppKit
 import SwiftUI
 
-struct SoundConnectApp: App {
+struct OpenXMApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @AppStorage("showMenuBarExtra") private var showMenuBar = true
 
     var body: some Scene {
-        Window("SoundConnect", id: "main") {
+        Window("OpenXM", id: "main") {
             RootView()
                 .environment(appDelegate.controller)
                 .environment(appDelegate.scenes)
@@ -19,7 +19,7 @@ struct SoundConnectApp: App {
         .defaultSize(width: 1160, height: 820)
         .windowResizability(.contentMinSize)
         .commands {
-            SoundConnectCommands(controller: appDelegate.controller, scenes: appDelegate.scenes, navigation: appDelegate.navigation,
+            OpenXMCommands(controller: appDelegate.controller, scenes: appDelegate.scenes, navigation: appDelegate.navigation,
                                  updates: appDelegate.updates)
         }
 
@@ -147,7 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func sizeMainWindowOnFirstLaunch() {
         guard UserDefaults.standard.string(forKey: "NSWindow Frame main") == nil else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            guard let window = NSApp.windows.first(where: { $0.title == "SoundConnect" && $0.isVisible }),
+            guard let window = NSApp.windows.first(where: { $0.title == "OpenXM" && $0.isVisible }),
                   let visible = (window.screen ?? NSScreen.main)?.visibleFrame else { return }
             let size = NSSize(width: min(1160, visible.width - 80), height: min(820, visible.height - 60))
             let origin = NSPoint(x: visible.midX - size.width / 2, y: visible.midY - size.height / 2)
@@ -172,7 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-struct SoundConnectCommands: Commands {
+struct OpenXMCommands: Commands {
     let controller: HeadphoneController
     let scenes: SceneStore
     let navigation: Navigation

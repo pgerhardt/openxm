@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import SoundConnect
+@testable import OpenXM
 
 struct FramingTests {
     // Literal V1 battery packet, independently derived from the documented wire format.
@@ -84,7 +84,7 @@ struct FramingTests {
         controller.apply(.upscaling(false))
         #expect(controller.state.noise == before)
         #expect(controller.state.upscaling?.enabled == true)
-        let store = SceneStore(controller: controller, fileURL: URL(fileURLWithPath: "/tmp/soundconnect-test-unused.json"))
+        let store = SceneStore(controller: controller, fileURL: URL(fileURLWithPath: "/tmp/openxm-test-unused.json"))
         #expect(!store.canApply(SceneStore.starterScenes[0]))
     }
 }

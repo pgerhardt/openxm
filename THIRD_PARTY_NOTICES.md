@@ -1,6 +1,6 @@
 # Third-party notices and provenance
 
-SoundConnect is an independent community fork. It is not the original Open Sound Connect distribution and is not affiliated with Sony, Apple, or Nina Labs.
+OpenXM is an independent community fork. It is not the original Open Sound Connect distribution and is not affiliated with Sony, Apple, or Nina Labs.
 
 ## Open Sound Connect — MIT
 
@@ -18,4 +18,4 @@ Vendored source from [ungive/mediaremote-adapter](https://github.com/ungive/medi
 
 ## Artwork and website
 
-The headphone model and thumbnail are upstream original Blender artwork under MIT; see [Resources/Artwork/ATTRIBUTION.md](Resources/Artwork/ATTRIBUTION.md). The website reuses that thumbnail, not manufacturer photographs. The new SoundConnect mark is drawn with CoreGraphics in `Sources/SoundConnectArtwork/main.swift` and SVG in `website/dist/assets/mark.svg`, under MIT. Product names are used to identify compatibility; trademark rights are not granted.
+The headphone model and thumbnail are upstream original Blender artwork under MIT; see [Resources/Artwork/ATTRIBUTION.md](Resources/Artwork/ATTRIBUTION.md). The website reuses that thumbnail, not manufacturer photographs. The new OpenXM mark is drawn with CoreGraphics in `Sources/OpenXMArtwork/main.swift` and SVG in `website/dist/assets/mark.svg`, under MIT. Product names are used to identify compatibility; trademark rights are not granted.

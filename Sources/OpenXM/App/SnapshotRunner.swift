@@ -2,7 +2,7 @@ import AppKit
 import SceneKit
 import SwiftUI
 
-/// Developer aid: `open "SoundConnect.app" --args --snapshot-dir /tmp/shots [--snapshot-quit]`.
+/// Developer aid: `open "OpenXM.app" --args --snapshot-dir /tmp/shots [--snapshot-quit]`.
 /// Waits for the headphones (up to 30 s), then renders the app's *own* main window for every page into PNGs via
 /// `cacheDisplay` (no screen-recording permission, no input injection). Read-only: it never changes settings.
 @MainActor
@@ -22,10 +22,10 @@ enum SnapshotRunner {
             // A SwiftUI Window can arrive after didFinishLaunching, particularly on a cold launch.
             // Wait for its creation and bring the developer capture window forward explicitly.
             let windowDeadline = Date().addingTimeInterval(10)
-            while !NSApp.windows.contains(where: { $0.identifier?.rawValue == "main" || $0.title == "SoundConnect" }) && Date() < windowDeadline {
+            while !NSApp.windows.contains(where: { $0.identifier?.rawValue == "main" || $0.title == "OpenXM" }) && Date() < windowDeadline {
                 try? await Task.sleep(for: .milliseconds(200))
             }
-            if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" || $0.title == "SoundConnect" }) {
+            if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" || $0.title == "OpenXM" }) {
                 NSApp.setActivationPolicy(.regular)
                 window.makeKeyAndOrderFront(nil)
                 NSApp.activate(ignoringOtherApps: true)
@@ -33,7 +33,7 @@ enum SnapshotRunner {
             try? await Task.sleep(for: .seconds(1.5))
             if let sizeIndex = arguments.firstIndex(of: "--snapshot-size"), sizeIndex + 1 < arguments.count {
                 let parts = arguments[sizeIndex + 1].split(separator: "x").compactMap { Double($0) }
-                if parts.count == 2, let window = NSApp.windows.first(where: { $0.title == "SoundConnect" && $0.isVisible }) {
+                if parts.count == 2, let window = NSApp.windows.first(where: { $0.title == "OpenXM" && $0.isVisible }) {
                     var frame = window.frame
                     frame.size = NSSize(width: parts[0], height: parts[1])
                     window.setFrame(frame, display: true)
@@ -87,7 +87,7 @@ enum SnapshotRunner {
     }
 
     static func capture(to url: URL) -> Bool {
-        guard let window = NSApp.windows.first(where: { $0.isVisible && $0.title == "SoundConnect" && $0.contentView != nil }),
+        guard let window = NSApp.windows.first(where: { $0.isVisible && $0.title == "OpenXM" && $0.contentView != nil }),
               let view = window.contentView,
               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return false }
         view.cacheDisplay(in: view.bounds, to: rep)

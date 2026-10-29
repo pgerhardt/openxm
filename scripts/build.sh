@@ -1,6 +1,6 @@
 #!/bin/zsh
-# Builds "SoundConnect.app" with SwiftPM.
-#   scripts/build.sh            release build into build/SoundConnect.app
+# Builds "OpenXM.app" with SwiftPM.
+#   scripts/build.sh            release build into build/OpenXM.app
 #   CONFIG=debug scripts/build.sh
 set -euo pipefail
 
@@ -11,7 +11,7 @@ case "$CONFIG" in
   *) echo "CONFIG must be release or debug" >&2; exit 2 ;;
 esac
 BUNDLE_ID=io.github.pgerhardt.SoundConnect
-APP="$ROOT/build/SoundConnect.app"
+APP="$ROOT/build/OpenXM.app"
 cd "$ROOT"
 
 # Use the selected toolchain without changing global developer settings.
@@ -25,8 +25,8 @@ if [[ -z "${SDKROOT:-}" && "$(xcode-select -p)" == /Library/Developer/CommandLin
 fi
 export SDKROOT=${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}
 echo "==> swift build ($CONFIG) with SDK ${SDKROOT:-default}"
-swift build -c "$CONFIG" --product SoundConnect
-swift build -c "$CONFIG" --product SoundConnectArtwork
+swift build -c "$CONFIG" --product OpenXM
+swift build -c "$CONFIG" --product OpenXMArtwork
 BIN=$(swift build -c "$CONFIG" --show-bin-path)
 echo "==> Local Now Playing helper"
 "$ROOT/scripts/build-mediaremote.sh"
@@ -34,7 +34,7 @@ echo "==> Local Now Playing helper"
 echo "==> Assembling bundle"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN/SoundConnect" "$APP/Contents/MacOS/SoundConnect"
+cp "$BIN/OpenXM" "$APP/Contents/MacOS/OpenXM"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 BUILD_NUMBER=$(date +%Y%m%d%H%M)
 plutil -replace CFBundleVersion -string "$BUILD_NUMBER" "$APP/Contents/Info.plist"
@@ -49,7 +49,7 @@ cp "$ROOT/Vendor/MediaRemoteAdapter/bin/mediaremote-adapter.pl" "$APP/Contents/R
 cp "$ROOT/Vendor/MediaRemoteAdapter/LICENSE" "$APP/Contents/Resources/MediaRemoteAdapter-LICENSE"
 
 echo "==> App icon"
-"$BIN/SoundConnectArtwork" icon "$ROOT/build/AppIcon.iconset"
+"$BIN/OpenXMArtwork" icon "$ROOT/build/AppIcon.iconset"
 iconutil -c icns "$ROOT/build/AppIcon.iconset" -o "$APP/Contents/Resources/AppIcon.icns"
 
 echo "==> Ad-hoc signing (identifier-based designated requirement keeps the Bluetooth grant across rebuilds)"

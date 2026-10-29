@@ -5,9 +5,9 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>SoundConnect</string>
+	<string>OpenXM</string>
 	<key>CFBundleExecutable</key>
-	<string>SoundConnect</string>
+	<string>OpenXM</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
@@ -15,23 +15,23 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>SoundConnect</string>
+	<string>OpenXM</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>0.2.0</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>2</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>SoundConnect talks to your Sony headphones over Bluetooth on this Mac to read and change their settings. Nothing leaves your Mac.</string>
+	<string>OpenXM talks to your Sony headphones over Bluetooth on this Mac to read and change their settings. Nothing leaves your Mac.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2026 rolottr and SoundConnect contributors. Not affiliated with Sony.</string>
+	<string>Copyright © 2026 rolottr, Sound Connect contributors, and OpenXM contributors. Not affiliated with Sony.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSSupportsAutomaticTermination</key>

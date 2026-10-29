@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import Observation
 
-/// Persists scenes to ~/Library/Application Support/SoundConnect/scenes.json and runs them.
+/// Persists scenes and runs them. Keep the original SoundConnect directory across the OpenXM rebrand.
 @MainActor
 @Observable
 final class SceneStore {

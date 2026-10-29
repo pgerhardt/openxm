@@ -1,6 +1,6 @@
 # Compatibility and hardware validation
 
-Snapshot: 2026-10-29. SoundConnect 0.1.0 prioritizes WH-1000XM3 and WH-1000XM4. Capability discovery, rather than a model-name guess, controls the UI. Bluetooth service discovery selects the V1/V2 transport. The V1 battery inquiry is `10 00`; `22` means POWER OFF on V1 and must never be used as a battery probe.
+Snapshot: 2026-10-29. OpenXM 0.2.0 prioritizes WH-1000XM3 and WH-1000XM4. Capability discovery, rather than a model-name guess, controls the UI. Bluetooth service discovery selects the V1/V2 transport. The V1 battery inquiry is `10 00`; `22` means POWER OFF on V1 and must never be used as a battery probe.
 
 ## Evidence
 

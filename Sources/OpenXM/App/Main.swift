@@ -13,7 +13,7 @@ enum Main {
                 withExtendedLifetime(delegate) { app.run() }
             }
         } else {
-            SoundConnectApp.main()
+            OpenXMApp.main()
         }
     }
 }

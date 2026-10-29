@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import SoundConnect
+@testable import OpenXM
 
 @MainActor
 struct UpdateCheckerTests {
@@ -16,13 +16,13 @@ struct UpdateCheckerTests {
 
     @Test func releaseUsesTagVersionAndReleasePage() throws {
         let json = """
-        {"tag_name": "v1.2.0", "html_url": "https://github.com/pgerhardt/soundconnect/releases/tag/v1.2.0",
+        {"tag_name": "v1.2.0", "html_url": "https://github.com/pgerhardt/openxm/releases/tag/v1.2.0",
          "draft": false, "prerelease": false, "assets": [
-          {"name": "SoundConnect-macos-arm64.zip", "browser_download_url": "https://example.com/arm64.zip"}]}
+          {"name": "OpenXM-macos-arm64.zip", "browser_download_url": "https://example.com/arm64.zip"}]}
         """
         let release = try UpdateChecker.release(from: Data(json.utf8))
         #expect(release.version == "1.2.0")
-        #expect(release.pageURL == URL(string: "https://github.com/pgerhardt/soundconnect/releases/tag/v1.2.0"))
+        #expect(release.pageURL == URL(string: "https://github.com/pgerhardt/openxm/releases/tag/v1.2.0"))
 
         let untagged = #"{"tag_name": "1.3.0", "html_url": "https://example.com/r", "draft": false, "prerelease": false}"#
         #expect(try UpdateChecker.release(from: Data(untagged.utf8)).version == "1.3.0")

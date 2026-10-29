@@ -1,6 +1,6 @@
 import AppKit
 import Testing
-@testable import SoundConnect
+@testable import OpenXM
 
 @MainActor
 struct PlaybackTests {

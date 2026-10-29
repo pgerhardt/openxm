@@ -1,21 +1,21 @@
 // swift-tools-version:6.0
-// Sound Connect for Mac.
+// OpenXM for Mac.
 // scripts/build.sh wraps the SwiftPM executable into a signed macOS app bundle.
 import PackageDescription
 
 let package = Package(
-    name: "SoundConnect",
+    name: "OpenXM",
     platforms: [.macOS(.v15)],
     products: [
-        .executable(name: "SoundConnect", targets: ["SoundConnect"]),
-        .executable(name: "SoundConnectArtwork", targets: ["SoundConnectArtwork"]),
+        .executable(name: "OpenXM", targets: ["OpenXM"]),
+        .executable(name: "OpenXMArtwork", targets: ["OpenXMArtwork"]),
     ],
     targets: [
-        .testTarget(name: "SoundConnectTests", dependencies: ["SoundConnect"],
+        .testTarget(name: "OpenXMTests", dependencies: ["OpenXM"],
                     swiftSettings: [.swiftLanguageMode(.v5)]),
         .executableTarget(
-            name: "SoundConnect",
-            path: "Sources/SoundConnect",
+            name: "OpenXM",
+            path: "Sources/OpenXM",
             swiftSettings: [.swiftLanguageMode(.v5)],
             linkerSettings: [
                 .linkedFramework("IOBluetooth"),
@@ -26,8 +26,8 @@ let package = Package(
         ),
         // Build-time tool: renders the app icon (and nothing else) with CoreGraphics into an .iconset.
         .executableTarget(
-            name: "SoundConnectArtwork",
-            path: "Sources/SoundConnectArtwork",
+            name: "OpenXMArtwork",
+            path: "Sources/OpenXMArtwork",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

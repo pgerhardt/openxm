@@ -49,7 +49,7 @@ final class SystemNowPlaying {
             try child.run()
             process = child
             // A dedicated queue keeps pipe reads off the UI thread and preserves event order.
-            DispatchQueue(label: "SoundConnect.NowPlaying").async { [weak self] in
+            DispatchQueue(label: "OpenXM.NowPlaying").async { [weak self] in
                 let handle = pipe.fileHandleForReading
                 defer { try? handle.close() }
                 while true {

@@ -112,7 +112,7 @@ final class DeviceState {
     var optimizerMeasuredPressure: Int?
     var alert: DeviceAlert?
 
-    /// V1 NC/ASM wire fields echoed back on writes (SoundConnect does the same: tm0/i3 + v30/c).
+    /// V1 NC/ASM wire fields echoed back on writes (Sony Sound Connect does the same: tm0/i3 + v30/c).
     var v1NcSettingType: UInt8 = 0x02
     var v1AsmSettingType: UInt8 = 0x01
 
