@@ -1,14 +1,10 @@
 # OpenXM
 
-**Unlock more from your Sony XM headphones.**
+OpenXM is a free, open-source Mac app for Sony XM headphones.
 
-OpenXM brings higher-bitrate audio, firmware choice, and private headphone controls to your Mac. Free and open source.
-
-- **Unlock LDAC and aptX HD.** Go beyond the Mac's standard AAC connection with higher-bitrate Bluetooth audio on WH-1000XM3. LDAC reaches **909 kbps at 44.1 kHz or 990 kbps at 48 kHz**; aptX HD gives you another high-quality option. Actual bitrate depends on your settings and connection. See [codec support and measured results](docs/CODEC-TRANSPORT.md).
-- **Bring back the firmware you prefer.** Downgrade WH-1000XM3 to **2.0.0, before Alexa integration**, or choose from ten original firmware packages. For listeners who prefer 2.0.0's noise cancellation, OpenXM offers a way back. The international 4.5.2 → 2.0.0 downgrade has been physically verified; a noise-canceling improvement is not guaranteed. See [firmware options](docs/FIRMWARE.md) and [listener reports](https://community.sony.co.uk/t5/portable-audio/sony-wh-1000xm3-v4-1-1-firmware-failure/td-p/2564068).
-- **Your headphones. Your data.** Get familiar Sony controls—noise canceling, ambient sound, EQ, device settings, and more—in a native Mac app. Optional listening history and location-triggered scenes stay on your Mac. No account, analytics, or uploads of your listening or location history.
-
-Codec selection and firmware tools are **experimental XM3 features in current source builds**, not included in release 0.2.0. Sony app parity is still in progress; the [feature tracker](docs/SONY-APP-PARITY.md) documents remaining gaps, including 360 Reality Audio personalization and activity recognition.
+- **LDAC and aptX HD on your Mac.** macOS normally connects to these headphones over AAC. OpenXM adds LDAC and aptX HD playback on WH-1000XM3. LDAC runs at up to 909 kbps at 44.1 kHz or 990 kbps at 48 kHz. See [codec settings](docs/CODEC-TRANSPORT.md).
+- **Firmware downgrades.** Install older XM3 firmware, including 2.0.0, the version before Alexa support. Some owners prefer its noise cancellation. See [available firmware](docs/FIRMWARE.md).
+- **Local headphone controls.** Adjust noise canceling, ambient sound, EQ, and device settings from your Mac. Listening history is optional, and both history and saved places stay on your Mac. No account or analytics.
 
 [Website](https://pgerhardt.github.io/openxm/) · [Download](https://github.com/pgerhardt/openxm/releases/latest) · [Compatibility](docs/COMPATIBILITY.md) · [Contribute](CONTRIBUTING.md)
 
@@ -19,28 +15,27 @@ Codec selection and firmware tools are **experimental XM3 features in current so
 ## What it does
 
 - **Noise control:** noise canceling, wind reduction, ambient level, and Focus on Voice where the headset supports them.
-- **Equalizer:** presets, a custom curve, Clear Bass, and locally saved curves. XM3/XM4 use five bands plus bass.
-- **Find Your Equalizer (unreleased, WH-1000XM3):** guided listening comparisons for sound balance, bass and detail, with original/result comparison and a verified Custom 2 save. Cancel restores the original EQ bank; interrupted sessions retain a local recovery file. Uses independently designed comparisons, without starting playback or changing volume.
+- **Equalizer:** presets, Clear Bass, and locally saved curves. XM3/XM4 use five bands plus bass. Find Your Equalizer on XM3 guides you through listening comparisons and saves the result to Custom 2; canceling restores your original settings.
 - **Sound and device settings:** DSEE, Speak-to-Chat (XM4), wearing detection, automatic power off, and other reported capabilities.
-- **Audio connection:** a live My Device card shows the headphone-reported music codec, Mac output sample rate/channels and headphone microphone activity. Automatic mode uses read-only route checks. An unreleased, opt-in XM3 codec selector adds SBC, AAC, aptX, aptX HD and LDAC through a separate experimental transmitter and virtual audio driver, with live media bitrate and encoder-target readings. All five codecs, Sony control coexistence and return to native AAC have been checked on one XM3. See [codec transport](docs/CODEC-TRANSPORT.md) for evidence and remaining limitations.
-- **Scenes:** save combinations of settings and apply them manually, on connection, on a schedule, or on app activation. Unreleased place triggers add arrival/departure with explicit location permission and stable boundary detection; see [location scenes](docs/LOCATION-SCENES.md).
-- **Legacy XM3 settings (unreleased):** device-supplied NC/AMBIENT button choices, Surround/VPT and Sound Position Control. Protocol tests pass; hardware write validation is pending. Sound effects also work with scenes.
-- **Listening history (unreleased):** opt-in daily playback-time estimates, separate opt-in session times, history charts, model/date filters and a browsable usage log. Preserves legacy totals and recorded time zones, with session-aware backup merging. A separate, default-off song-history option saves available titles, artists, albums, sources and intervals, with search and source filters. Mac metadata requires a matching player audio route; unknown sources leave gaps. No cloud sync. See [recording and retention](docs/LISTENING-HISTORY.md).
-- **App-data backup (unreleased):** export scenes, saved places and listening history while offline. Review and merge selected data, keep imported automatic triggers disabled, and preserve recording/location preferences. Original files are retained for recovery; repeat imports do not add overlapping daily listening totals. Files use OpenXM's own format, without Sony cloud interoperability.
-- **Settings backup (unreleased):** save readable settings, the reported V1 voice-language selection and the active EQ curve, optionally including all custom EQ slots on V1 headphones and standard customizable V2 EQ. Preview compatibility and restore selected values with read-back, preset-switch persistence and reconnect checks. Collecting inactive curves briefly selects each preset and restores the original selection. A saved language opens a separate package review; ordinary settings restoration never uploads a language package. Downloaded voice packages can be exported and reopened separately with their original metadata, notices and provenance. Hidden ambient preferences, calibration and Sony account sync remain incomplete; physical restoration is not yet verified.
+- **Audio connection:** view the codec, sample rate, bitrate, and microphone activity. On XM3, choose SBC, AAC, aptX, aptX HD, or LDAC, or use Automatic for the standard macOS connection. Your codec and quality settings are saved per headphone. Custom codecs use a helper and virtual audio driver; see [setup and details](docs/CODEC-TRANSPORT.md).
+- **Scenes:** save combinations of settings and apply them manually, on connection, on a schedule, or when opening an app. [Location scenes](docs/LOCATION-SCENES.md) apply settings when you arrive at or leave a saved place, with your permission.
+- **XM3 settings:** NC/AMBIENT button assignment, Surround/VPT, and Sound Position Control. Sound effects can also be saved in scenes.
+- **Listening history:** optional playback-time estimates, sessions, charts, and searchable song history. Song recording has its own switch and starts off. See [recording and retention](docs/LISTENING-HISTORY.md).
+- **Backups:** export scenes, saved places, listening history, headphone settings, and supported custom EQ slots. Review what to restore before applying it. Backups are local files in OpenXM's format.
 - **Menu bar:** quick controls, battery, EQ, and scenes without leaving your current app.
-- **Voice language (unreleased):** display V1 installed/supported languages and check/download original packages using a fresh international XM3 service mapping. Show Sony's localized preparation instructions and integrity-checked notice; preserve original package/notice bytes, metadata, hashes and provenance. A read-only preparation check rereads the headset, enforces its update method and battery threshold, and revalidates saved files. An experimental install/resume flow adds final confirmation, a separate session journal and post-install language verification. Live XM3 package and installation validation remain pending. See [protocol evidence](docs/VOICE-GUIDANCE.md).
-- **Headphone firmware (unreleased, experimental):** check regional Sony metadata and select from ten pinned international, Japanese and Chinese XM3 packages, then install or resume from Settings. Upgrades, downgrades and region changes are experimental; only international 4.5.2 → 2.0.0 has a physical installation result.
+- **Voice language:** view supported languages and download original Sony voice packages. XM3 installation and recovery are experimental; see [voice guidance](docs/VOICE-GUIDANCE.md).
+- **Headphone firmware:** install or resume XM3 firmware upgrades and downgrades from Settings. Ten original international, Japanese, and Chinese packages are available. See [firmware instructions](docs/FIRMWARE.md) for supported versions and regions.
 - **Mac integration:** keyboard shortcuts, reconnection, optional launch at login, and local Now Playing controls.
-- **Audio recovery (unreleased):** unexpected custom-codec audio loss pauses a verified active media player before restoring an available output. Codec switches remain quiet. If pause cannot be confirmed, use Restore audio anyway or choose an output; reconnecting never automatically starts playback. Physical disconnect/pause validation is pending.
-- **Saved codec (unreleased):** the preferred codec is remembered per headphone and restored once after launch when those headphones connect. Choosing Automatic saves that choice; quitting or losing the connection preserves the preference. Sample-rate and LDAC settings also persist.
-- **Honest feedback:** setting read-back where supported and Activity entries for confirmed, adjusted, failed, or unconfirmed changes.
+- **Audio recovery:** if custom-codec audio disconnects, OpenXM attempts to pause the active player before restoring another output. If it cannot confirm the pause, it asks you to restore audio manually.
+- **Activity log:** see which setting changes succeeded, failed, or could not be confirmed.
 
-The native app talks to the headset; the website's interactive controls are an illustrative preview. An [experimental Mac-only firmware tool](docs/FIRMWARE.md) has completed an international WH-1000XM3 downgrade from 4.5.2 to 2.0.0, including restart, completion and independent version read-back. The tool also implements transitions among ten original international, Japanese and Chinese packages, with explicit cross-region warnings and regional read-back. Those other paths have automated coverage but await physical installation tests. Other models and unlisted firmware remain unsupported. The separate experimental codec transport does not modify headphone firmware or add codecs to Apple's system Bluetooth stack.
+Features depend on the model and firmware. See [compatibility](docs/COMPATIBILITY.md) and [Sony app feature coverage](docs/SONY-APP-PARITY.md). The website demo uses sample data.
 
 ## Install
 
 Requires **macOS 15+**, Apple silicon or Intel, and compatible headphones paired in System Settings → Bluetooth.
+
+The feature list above describes the current source. Codec selection, firmware tools, and other recent additions require a [source build](#build-from-source); they are not included in release 0.2.0.
 
 1. Download the ZIP matching your Mac from [Releases](https://github.com/pgerhardt/openxm/releases/latest): `arm64` for Apple silicon or `x86_64` for Intel.
 2. Unzip it and move **OpenXM.app** into Applications.
