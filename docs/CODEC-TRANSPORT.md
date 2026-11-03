@@ -6,6 +6,12 @@ the normal macOS audio stack. Custom selections use a separate helper and
 OpenXM Headphones, a virtual Core Audio output. Audio is encoded locally and
 sent over the Mac's built-in Bluetooth radio; no recording is saved.
 
+For comparison, Apple's Bluetooth AAC typically runs at about 256 kbps, as
+described in [Archimago's AAC measurements](https://archimago.blogspot.com/2023/08/).
+LDAC High uses 909 kbps at 44.1 kHz or 990 kbps at 48 kHz, about 3.5–3.9 times
+that bitrate. The AAC figure is an approximate reference; OpenXM does not measure
+the native macOS AAC bitrate in Automatic mode. LDAC Auto can select lower rates.
+
 Preferred codec is saved per headphone, including Automatic. After a new launch,
 OpenXM restores a saved custom choice once the same headphones have a live,
 initialized XM3 control connection and the audio driver is available. It does not

@@ -2,7 +2,7 @@
 
 OpenXM is a free, open-source Mac app for Sony XM headphones.
 
-- **LDAC and aptX HD on your Mac.** macOS normally connects to these headphones over AAC. OpenXM adds LDAC and aptX HD playback on WH-1000XM3. LDAC runs at up to 909 kbps at 44.1 kHz or 990 kbps at 48 kHz. See [codec settings](docs/CODEC-TRANSPORT.md).
+- **LDAC and aptX HD on your Mac.** macOS normally uses AAC at about 256 kbps. OpenXM adds LDAC and aptX HD playback on WH-1000XM3. At its highest setting, LDAC runs at 909 kbps at 44.1 kHz or 990 kbps at 48 kHz—about 3.5–3.9 times AAC's bitrate. See [codec settings and bitrate comparison](docs/CODEC-TRANSPORT.md).
 - **Firmware downgrades.** Install older XM3 firmware, including 2.0.0, the version before Alexa support. Some owners prefer its noise cancellation. See [available firmware](docs/FIRMWARE.md).
 - **Local headphone controls.** Adjust noise canceling, ambient sound, EQ, and device settings from your Mac. Listening history is optional, and both history and saved places stay on your Mac. No account or analytics.
 
