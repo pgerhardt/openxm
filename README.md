@@ -1,8 +1,14 @@
 # OpenXM
 
-**Control Sony XM headphones from your Mac. Free and open source.**
+**Unlock more from your Sony XM headphones.**
 
-A native SwiftUI app with local Bluetooth control, noise canceling, ambient sound, EQ, saved scenes, and a compact menu bar. No account, activation, analytics, or paid feature unlocks.
+OpenXM brings higher-bitrate audio, firmware choice, and private headphone controls to your Mac. Free and open source.
+
+- **Unlock LDAC and aptX HD.** Go beyond the Mac's standard AAC connection with higher-bitrate Bluetooth audio on WH-1000XM3. LDAC reaches **909 kbps at 44.1 kHz or 990 kbps at 48 kHz**; aptX HD gives you another high-quality option. Actual bitrate depends on your settings and connection. See [codec support and measured results](docs/CODEC-TRANSPORT.md).
+- **Bring back the firmware you prefer.** Downgrade WH-1000XM3 to **2.0.0, before Alexa integration**, or choose from ten original firmware packages. For listeners who prefer 2.0.0's noise cancellation, OpenXM offers a way back. The international 4.5.2 → 2.0.0 downgrade has been physically verified; a noise-canceling improvement is not guaranteed. See [firmware options](docs/FIRMWARE.md) and [listener reports](https://community.sony.co.uk/t5/portable-audio/sony-wh-1000xm3-v4-1-1-firmware-failure/td-p/2564068).
+- **Your headphones. Your data.** Get familiar Sony controls—noise canceling, ambient sound, EQ, device settings, and more—in a native Mac app. Optional listening history and location-triggered scenes stay on your Mac. No account, analytics, or uploads of your listening or location history.
+
+Codec selection and firmware tools are **experimental XM3 features in current source builds**, not included in release 0.2.0. Sony app parity is still in progress; the [feature tracker](docs/SONY-APP-PARITY.md) documents remaining gaps, including 360 Reality Audio personalization and activity recognition.
 
 [Website](https://pgerhardt.github.io/openxm/) · [Download](https://github.com/pgerhardt/openxm/releases/latest) · [Compatibility](docs/COMPATIBILITY.md) · [Contribute](CONTRIBUTING.md)
 
