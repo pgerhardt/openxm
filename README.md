@@ -4,7 +4,7 @@ OpenXM is a free, open-source Mac app for Sony XM headphones.
 
 - **LDAC and aptX HD on your Mac.** macOS normally uses AAC at about 256 kbps. OpenXM adds LDAC and aptX HD playback on WH-1000XM3. At its highest setting, LDAC runs at 909 kbps at 44.1 kHz or 990 kbps at 48 kHz—about 3.5–3.9 times AAC's bitrate. See [codec settings and bitrate comparison](docs/CODEC-TRANSPORT.md).
 - **Firmware downgrades.** Install older XM3 firmware, including 2.0.0, the version before Alexa support. Some owners prefer its noise cancellation. See [available firmware](docs/FIRMWARE.md).
-- **Local headphone controls.** Adjust noise canceling, ambient sound, EQ, and device settings from your Mac. Listening history is optional, and both history and saved places stay on your Mac. No account or analytics.
+- **Headphone controls without Sony telemetry.** Configure noise canceling, ambient sound, EQ, and device settings over Bluetooth. OpenXM does not send listening history, location data, or usage telemetry to Sony. Optional listening history and saved places stay on your Mac. No Sony account required.
 
 [Website](https://pgerhardt.github.io/openxm/) · [Download](https://github.com/pgerhardt/openxm/releases/latest) · [Compatibility](docs/COMPATIBILITY.md) · [Contribute](CONTRIBUTING.md)
 
@@ -107,6 +107,8 @@ Tests and a successful build do **not** establish physical-headphone compatibili
 Closing the window keeps OpenXM in the menu bar when enabled. Use ⌘Q or Quit to stop it and its automations.
 
 ## Privacy
+
+Sony's [Sound Connect privacy policy](https://policies.songpal.sony.net/headphones/pp/na/20241001/pp/hpc_pp_na_en.html) describes collecting listening details, including song titles, artists, and timestamps, and using them for listening history and a usage profile when Listening History is enabled. OpenXM configures the headphones locally, without sending Sony listening history, location data, or usage telemetry. Its optional history and saved places stay on your Mac.
 
 Headphone communication is local Bluetooth. Scenes live in `~/Library/Application Support/SoundConnect/scenes.json`; preferences use the separate `io.github.pgerhardt.SoundConnect` defaults domain. The storage names are internal identifiers from early development. This fork does not overwrite the original upstream app's preferences or scenes.
 
