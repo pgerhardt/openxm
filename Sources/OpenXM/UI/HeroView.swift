@@ -29,9 +29,11 @@ struct HeroView: View {
                 BatteryLabel(battery: state.battery)
 
                 HStack(spacing: 8) {
-                    if let codec = state.codec, codec != .unsettled {
-                        Badge(text: codec.title, tint: Theme.text.opacity(0.9))
-                            .accessibilityLabel("Codec \(codec.title)")
+                    if controller.isConnected || controller.isReplay {
+                        let audio = controller.audioConnectionPresentation
+                        Badge(text: audio.badge, tint: audio.hasMicWarning ? Theme.warning : Theme.text.opacity(0.9))
+                            .help("See Audio Connection below for music codec and microphone activity.")
+                            .accessibilityLabel("Audio connection \(audio.badge)")
                     }
                     if let name = state.capabilities.upscalingName, state.upscaling?.enabled == true {
                         Badge(text: name.uppercased(), symbol: state.upscaling?.active == true ? "waveform" : nil,

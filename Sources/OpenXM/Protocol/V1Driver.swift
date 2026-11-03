@@ -7,6 +7,7 @@ import Foundation
 final class V1Driver: HeadphoneDriver {
     let link: MDRLink
     let state: DeviceState
+    private let subscribesToAlerts: Bool
 
     /// Support-function codes (table 1, V1).
     enum Function {
@@ -18,6 +19,8 @@ final class V1Driver: HeadphoneDriver {
         static let powerOff: UInt8 = 0x21
         static let pairingManagement: UInt8 = 0x38
         static let voiceGuidance: UInt8 = 0x39
+        static let surround: UInt8 = 0x41
+        static let soundPosition: UInt8 = 0x42
         static let presetEQ: UInt8 = 0x51
         static let presetEQFixed: UInt8 = 0x53
         static let noiseCancelling: UInt8 = 0x61
@@ -39,14 +42,17 @@ final class V1Driver: HeadphoneDriver {
 
     private var hasTable2 = false
     private var ncInquiredType: UInt8 = 0x02
+    private var lastReportedAmbientLevel: Int?
     private var eqInquiredType: UInt8 = 0x01
     private var eqStepCenter = 10
     private var stcModeOutValues: [UInt8] = []
     private var nameRefreshScheduled = false
+    private var metadataBatch = V1PlaybackMetadataBatch()
 
-    init(link: MDRLink, state: DeviceState) {
+    init(link: MDRLink, state: DeviceState, subscribesToAlerts: Bool = true) {
         self.link = link
         self.state = state
+        self.subscribesToAlerts = subscribesToAlerts
     }
 
     private func supports(_ function: UInt8) -> Bool { state.supportFunctions.contains(function) }
@@ -63,7 +69,8 @@ final class V1Driver: HeadphoneDriver {
         caps.connectionPriority = supports(Function.connectionMode)
         caps.autoPause = supports(Function.controlByWearing)
         caps.speakToChat = supports(Function.speakToChat)
-        caps.voiceGuidance = supports(Function.voiceGuidance)
+        // Function 39 alone does not establish support for an on/off switch or language changes.
+        // The separate table-2 capability reply supplies those flags.
         caps.pairedDevices = supports(Function.pairingManagement)
         caps.alerts = true
         if supports(Function.battery) { caps.batteryKinds.insert(.single) }
@@ -87,6 +94,9 @@ final class V1Driver: HeadphoneDriver {
         }
 
         // Capabilities.
+        for (function, type) in [(Function.surround, UInt8(0x01)), (Function.soundPosition, UInt8(0x02))] where supports(function) {
+            _ = try await ask([0x40, type, 0x01], expect: .init(.dataMdr, 0x41, type))
+        }
         if supports(Function.presetEQ) || supports(Function.presetEQFixed) {
             eqInquiredType = supports(Function.presetEQ) ? 0x01 : 0x03
             _ = try await ask([0x50, eqInquiredType, 0x01], expect: .init(.dataMdr, 0x51, eqInquiredType))
@@ -130,12 +140,16 @@ final class V1Driver: HeadphoneDriver {
         }
 
         // Ask the headset to send confirmation prompts (multipoint, connection quality) to us.
-        try await link.send([0x94, 0x01, 0x00])
+        if subscribesToAlerts { try await link.send([0x94, 0x01, 0x00]) }
 
         try await readAllValues()
     }
 
     private func readAllValues() async throws {
+        for (function, type) in [(Function.surround, UInt8(0x01)), (Function.soundPosition, UInt8(0x02))] where supports(function) {
+            _ = try await ask([0x42, type], expect: .init(.dataMdr, 0x43, type))
+            _ = try await ask([0x46, type], expect: .init(.dataMdr, 0x47, type))
+        }
         if supports(Function.presetEQ) || supports(Function.presetEQFixed) {
             _ = try await ask([0x52, eqInquiredType], expect: .init(.dataMdr, 0x53, eqInquiredType))
             _ = try await ask([0x56, eqInquiredType], expect: .init(.dataMdr, 0x57, eqInquiredType))
@@ -175,12 +189,27 @@ final class V1Driver: HeadphoneDriver {
             _ = try await ask([0x36, 0x01], table: .dataMdrNo2, expect: .init(.dataMdrNo2, 0x37, 0x01))
         }
         if hasTable2 && supports(Function.voiceGuidance) {
-            _ = try await ask([0x46, 0x01, 0x01], table: .dataMdrNo2, expect: .init(.dataMdrNo2, 0x47, 0x01))
+            for query in V1VoiceGuidance.queries(for: state.capabilities.voiceGuidanceCapability) {
+                _ = try await ask(query.payload, table: .dataMdrNo2, expect: query.reply)
+            }
         }
         try await refreshStatus()
     }
 
     func refreshStatus() async throws {
+        if let cap = state.capabilities.equalizer {
+            _ = try await ask([0x52, eqInquiredType], expect: .init(.dataMdr, 0x53, eqInquiredType))
+            if state.equalizer == nil || (cap.supportsBandEditing
+                && (state.equalizer?.bands.count != cap.bandCount || (cap.hasClearBass && state.equalizer?.clearBass == nil))) {
+                _ = try await ask([0x56, eqInquiredType], expect: .init(.dataMdr, 0x57, eqInquiredType))
+            }
+        }
+        if state.capabilities.noise != nil {
+            _ = try await ask([0x62, ncInquiredType], expect: .init(.dataMdr, 0x63, ncInquiredType))
+            if state.noise == nil {
+                _ = try await ask([0x66, ncInquiredType], expect: .init(.dataMdr, 0x67, ncInquiredType))
+            }
+        }
         if supports(Function.battery) {
             _ = try await ask([0x10, 0x00], expect: .init(.dataMdr, 0x11, 0x00))
         }
@@ -207,37 +236,113 @@ final class V1Driver: HeadphoneDriver {
     private func refreshPlayback() async throws {
         _ = try await ask([0xA2, 0x01], expect: .init(.dataMdr, 0xA3, 0x01))
         _ = try await ask([0xA6, 0x01, 0x20], expect: .init(.dataMdr, 0xA7, 0x01, detail: 0x20))
-        for detail: UInt8 in [0x00, 0x01, 0x02] {
-            _ = try await ask([0xA6, 0x01, detail], expect: .init(.dataMdr, 0xA7, 0x01, detail: detail))
+        try await refreshPlaybackNames()
+    }
+
+    private func invalidatePlaybackNames() {
+        metadataBatch.reset()
+        state.nowPlaying.receiveMetadata(nil)
+    }
+
+    private func refreshPlaybackNames() async throws {
+        invalidatePlaybackNames()
+        do {
+            for detail: UInt8 in [0x00, 0x01, 0x02] {
+                guard try await ask([0xA6, 0x01, detail], expect: .init(.dataMdr, 0xA7, 0x01, detail: detail)) != nil else {
+                    invalidatePlaybackNames()
+                    return
+                }
+            }
+        } catch {
+            invalidatePlaybackNames()
+            throw error
         }
     }
 
     // MARK: Writes
 
+    /// V1's unspecified preset targets the currently selected slot. Validate it before encoding bands.
+    func equalizerPayload(_ change: DeviceChange, requireAvailability: Bool = true) throws -> [UInt8] {
+        guard let cap = state.capabilities.equalizer,
+              !requireAvailability || state.equalizerAvailable == true else {
+            throw DriverError.unsupported("Equalizer in the current headphone mode")
+        }
+        switch change {
+        case .equalizerPreset(let id):
+            guard cap.presets.contains(where: { $0.id == id }) else { throw DriverError.unsupported("EQ preset") }
+            return [0x58, eqInquiredType, id, 0]
+        case .equalizerBands(let bands, let bass):
+            guard eqInquiredType == 1, cap.supportsBandEditing, let current = state.equalizer,
+                  cap.presets.contains(where: { $0.id == current.presetID && $0.isEditable }) else {
+                throw DriverError.unsupported("EQ curve without a confirmed editable preset")
+            }
+            let curve = EqualizerState(presetID: current.presetID, bands: bands,
+                clearBass: cap.hasClearBass ? (bass ?? current.clearBass) : bass)
+            try EqualizerBank.validateCurve(curve, capability: cap)
+            let center = -cap.bandRange.lowerBound
+            let steps = (curve.clearBass.map { [$0 + center] } ?? []) + bands.map { $0 + center }
+            guard steps.count <= 255, steps.allSatisfy({ (0...255).contains($0) }) else {
+                throw DriverError.malformed("EQ steps")
+            }
+            return [0x58, eqInquiredType, 0xFF, UInt8(steps.count)] + steps.map(UInt8.init)
+        default: throw DriverError.unsupported("EQ command")
+        }
+    }
+
+    /// Fresh status and active-slot checks run inside the caller's link transaction.
+    func applyEqualizer(_ change: DeviceChange,
+                        send: ([UInt8]) async throws -> Void,
+                        request: ([UInt8], MDRLink.Matcher) async throws -> Void) async throws {
+        // A cleanup selection may retry after a status timeout. Reading status is permitted;
+        // sending remains gated on the fresh reply below.
+        _ = try equalizerPayload(change, requireAvailability: false)
+        let cap = state.capabilities.equalizer
+        let type = eqInquiredType
+        let target: UInt8?
+        if case .equalizerBands = change { target = state.equalizer?.presetID } else { target = nil }
+        state.equalizerAvailable = nil
+        state.equalizer = nil
+        state.equalizerBank = nil
+        try await request([0x52, type], .init(.dataMdr, 0x53, type))
+        guard state.equalizerAvailable == true, state.capabilities.equalizer == cap, eqInquiredType == type else {
+            throw DriverError.unsupported("Equalizer in the current headphone mode")
+        }
+        if let target {
+            try await request([0x56, type], .init(.dataMdr, 0x57, type))
+            guard state.equalizer?.presetID == target, state.capabilities.equalizer == cap, eqInquiredType == type else {
+                throw DriverError.unsupported("The active EQ preset changed; review it before editing")
+            }
+        }
+        let payload = try equalizerPayload(change)
+        state.equalizer = nil
+        state.equalizerBank = nil
+        try await send(payload)
+        // MDRLink delivers the frame to handle() before resuming; do not replay an older reply here.
+        try await request([0x56, type], .init(.dataMdr, 0x57, type))
+        guard let actual = state.equalizer, state.capabilities.equalizer == cap, eqInquiredType == type,
+              target == nil || actual.presetID == target else {
+            throw DriverError.malformed("EQ read-back or active preset")
+        }
+    }
+
     func apply(_ change: DeviceChange) async throws {
         switch change {
         case .noise(let value, let dragging):
-            guard let cap = state.capabilities.noise else { throw DriverError.unsupported("Ambient sound control") }
-            try await link.send(noisePayload(value, capability: cap, dragging: dragging))
-            if !dragging {
-                try await readBack([0x66, ncInquiredType], expect: .init(.dataMdr, 0x67, ncInquiredType))
-            }
+            try await applyNoise(value, dragging: dragging,
+                send: { try await self.link.send($0) },
+                request: { _ = try await self.link.request($0, expect: $1) })
 
-        case .equalizerPreset(let id):
-            guard state.capabilities.equalizer != nil else { throw DriverError.unsupported("Equalizer") }
-            try await link.send([0x58, eqInquiredType, id, 0x00])
-            try await readBack([0x56, eqInquiredType], expect: .init(.dataMdr, 0x57, eqInquiredType))
+        case .equalizerBank(let bank):
+            try await restoreEqualizerBank(bank)
 
-        case .equalizerBands(let bands, let clearBass):
-            guard let cap = state.capabilities.equalizer else { throw DriverError.unsupported("Equalizer") }
-            guard bands.count == cap.bandCount else { throw DriverError.malformed("band count") }
-            // Sony Sound Connect sends band steps against "unspecified" (0xFF): they apply to the active
-            // editable preset (Manual / Custom). Never combine a preset change and steps in one frame.
-            var steps: [UInt8] = []
-            if cap.hasClearBass { steps.append(UInt8(clamping: (clearBass ?? state.equalizer?.clearBass ?? 0) + eqStepCenter)) }
-            steps += bands.map { UInt8(clamping: $0 + eqStepCenter) }
-            try await link.send([0x58, eqInquiredType, 0xFF, UInt8(steps.count)] + steps)
-            try await readBack([0x56, eqInquiredType], expect: .init(.dataMdr, 0x57, eqInquiredType))
+        case .equalizerPreset, .equalizerBands:
+            try await applyEqualizer(change, send: { try await self.link.send($0) },
+                request: { _ = try await self.link.request($0, expect: $1) })
+
+        case .surroundPreset, .soundPosition:
+            let payload = try soundEffectPayload(change)
+            try await link.send(payload)
+            try await readBack([0x46, payload[1]], expect: .init(.dataMdr, 0x47, payload[1]))
 
         case .upscaling(let on):
             guard supports(Function.upscaling) else { throw DriverError.unsupported("DSEE") }
@@ -256,9 +361,9 @@ final class V1Driver: HeadphoneDriver {
             try await link.send([0xF8, 0x05, 0x01, on ? 0x01 : 0x00])
             try await readBack([0xF6, 0x05], expect: .init(.dataMdr, 0xF7, 0x05))
 
-        case .speakToChatOptions(let sensitivity, let timeout):
+        case .speakToChatOptions(let sensitivity, let timeout, let savedVoiceFocus):
             guard supports(Function.speakToChat) else { throw DriverError.unsupported("Speak-to-Chat") }
-            let voiceFocus: UInt8 = (state.speakToChat?.voiceFocus ?? false) ? 0x01 : 0x00
+            let voiceFocus: UInt8 = (savedVoiceFocus ?? state.speakToChat?.voiceFocus ?? false) ? 0x01 : 0x00
             try await link.send([0xFC, 0x05, 0x00, sensitivity.rawValue, voiceFocus, timeout.rawValue])
             try await readBack([0xFA, 0x05], expect: .init(.dataMdr, 0xFB, 0x05))
 
@@ -288,10 +393,15 @@ final class V1Driver: HeadphoneDriver {
             try await readBack([0xD6, slot], expect: .init(.dataMdr, 0xD7, slot),
                                timeout: setting.key.contains("MULTIPOINT") ? Self.confirmationTimeout : 4)
 
+        case .generalSettingChoice(let slot, let index):
+            try await link.send(generalSettingChoicePayload(slot: slot, index: index))
+            try await readBack([0xD6, slot], expect: .init(.dataMdr, 0xD7, slot),
+                               timeout: state.setting(slot: slot)?.isButtonAssignment == true ? Self.confirmationTimeout : 4)
+
         case .voiceGuidance(let on):
-            guard hasTable2, supports(Function.voiceGuidance) else { throw DriverError.unsupported("Voice guidance") }
-            try await link.send([0x48, 0x01, 0x01, on ? 0x01 : 0x00], table: .dataMdrNo2)
-            try await readBack([0x46, 0x01, 0x01], table: .dataMdrNo2, expect: .init(.dataMdrNo2, 0x47, 0x01))
+            try await link.send(voiceGuidancePayload(on), table: .dataMdrNo2)
+            state.voiceGuidance = nil
+            try await readBack([0x46, 0x01, 0x01], table: .dataMdrNo2, expect: .init(.dataMdrNo2, 0x47, 0x01, detail: 0x01))
 
         case .pairingMode(let on):
             guard hasTable2, supports(Function.pairingManagement) else { throw DriverError.unsupported("Pairing mode") }
@@ -311,6 +421,81 @@ final class V1Driver: HeadphoneDriver {
         case .listeningMode, .voiceGuidanceVolume, .ncAmbButton, .headGesture:
             throw DriverError.unsupported(change.label)
         }
+    }
+
+    func soundEffectPayload(_ change: DeviceChange) throws -> [UInt8] {
+        switch change {
+        case .surroundPreset(let id):
+            guard supports(Function.surround), state.surroundAvailable == true,
+                  state.capabilities.surroundPresets.contains(where: { $0.id == id }) else {
+                throw DriverError.unsupported("Surround preset")
+            }
+            return [0x48, 0x01, id]
+        case .soundPosition(let position):
+            guard supports(Function.soundPosition), state.soundPositionAvailable == true,
+                  state.capabilities.soundPositions.contains(position) else {
+                throw DriverError.unsupported("Sound position")
+            }
+            return [0x48, 0x02, position.rawValue]
+        default: throw DriverError.unsupported(change.label)
+        }
+    }
+
+    /// Sony V1 generalsetting/c serializes the advertised list index, in the range 0..<64.
+    func generalSettingChoicePayload(slot: UInt8, index: UInt8) throws -> [UInt8] {
+        guard supports(slot), let setting = state.setting(slot: slot), setting.isList,
+              index < 64, setting.options.contains(where: { $0.index == index }) else {
+            throw DriverError.unsupported("This button function")
+        }
+        return [0xD8, slot, 0x02, index]
+    }
+
+    /// The caller owns the transaction gate. The closures keep the exact production sequence testable.
+    func applyNoise(_ value: NoiseControl, dragging: Bool,
+                    send: ([UInt8]) async throws -> Void,
+                    request: ([UInt8], MDRLink.Matcher) async throws -> Void) async throws {
+        guard let cap = state.capabilities.noise, state.noise != nil,
+              state.noiseAvailable == true, cap.modes.contains(value.mode) else {
+            throw DriverError.unsupported("Ambient sound control in the current headphone mode")
+        }
+        if value.mode == .ambient {
+            guard cap.ambientRange.contains(value.ambientLevel), !value.focusOnVoice || cap.supportsVoiceFocus else {
+                throw DriverError.unsupported("This ambient sound setting")
+            }
+        }
+        if !dragging {
+            state.noiseAvailable = nil
+            try await request([0x62, ncInquiredType], .init(.dataMdr, 0x63, ncInquiredType))
+            guard state.noiseAvailable == true, state.noise != nil, state.capabilities.noise == cap else {
+                throw DriverError.unsupported("Ambient sound control in the current headphone mode")
+            }
+        }
+        let wasOff = state.noise?.mode == .off
+        let payload = noisePayload(value, capability: cap, dragging: dragging)
+        if !dragging { state.noise = nil }
+        try await send(payload)
+        if dragging { return }
+        try await readNoise(request: request)
+        // XM3 4.5.2 treats ON as resume-last-mode and ignores supplied NC/ASM fields.
+        // Commit the requested settings only after a fresh reply confirms it resumed.
+        if wasOff, value.mode != .off, let actual = state.noise, actual.mode != .off,
+           DeviceChange.noise(value, dragging: false).isReflected(in: state) == false {
+            guard state.noiseAvailable == true else {
+                throw DriverError.unsupported("Ambient sound control became unavailable")
+            }
+            link.note("Noise control resumed its previous settings; applying the requested settings now.")
+            let completion = noisePayload(value, capability: cap, dragging: false)
+            state.noise = nil
+            try await send(completion)
+            try await readNoise(request: request)
+        }
+    }
+
+    private func readNoise(request: ([UInt8], MDRLink.Matcher) async throws -> Void) async throws {
+        // MDRLink delivers the received frame to handle() before resuming this request.
+        // Do not parse it again here: a newer notification may already have arrived.
+        try await request([0x66, ncInquiredType], .init(.dataMdr, 0x67, ncInquiredType))
+        guard state.noise != nil else { throw DriverError.malformed("NC/ambient read-back") }
     }
 
     /// Sony Sound Connect v30/c: slider 0 = NC (dual), 1 = wind (NC single), 2… = ambient level n-1 with NC off.
@@ -344,13 +529,18 @@ final class V1Driver: HeadphoneDriver {
     }
 
     func startNoiseOptimizer() async throws {
-        guard supports(Function.ncOptimizer) else { throw DriverError.unsupported("NC Optimizer") }
-        try await link.send([0x84, 0x01, 0x00, 0x01])
+        try await setNoiseOptimizer(start: true)
     }
 
     func cancelNoiseOptimizer() async throws {
-        guard supports(Function.ncOptimizer) else { throw DriverError.unsupported("NC Optimizer") }
-        try await link.send([0x84, 0x01, 0x00, 0x00])
+        try await setNoiseOptimizer(start: false)
+    }
+
+    private func setNoiseOptimizer(start: Bool) async throws {
+        try await V1NoiseOptimizer.perform(start: start, supported: supports(Function.ncOptimizer),
+                                          capability: state.capabilities.ncOptimizerCapability) { payload, matcher in
+            try await self.link.request(payload, expect: matcher)
+        }
     }
 
     func powerOff() async throws {
@@ -413,67 +603,115 @@ final class V1Driver: HeadphoneDriver {
             upscaling.active = status == 0x01
             state.upscaling = upscaling
         case 0x19, 0x1B:
-            _ = try r.u8()
-            state.codec = AudioCodec(rawValue: try r.u8()) ?? .other
+            guard p.count >= 2, p[1] == 0x00 else { return }
+            state.codec = p.count == 3 ? AudioCodec(rawValue: p[2]) ?? .other : nil
+        case 0x41:
+            switch try r.u8() {
+            case 0x01:
+                let count = Int(try r.u8())
+                var presets: [SurroundPreset] = []
+                for _ in 0..<count {
+                    let id = try r.u8()
+                    let name = try r.string()
+                    guard !presets.contains(where: { $0.id == id }) else { throw DriverError.malformed("duplicate surround preset") }
+                    presets.append(SurroundPreset(id: id, name: name.isEmpty ? SurroundPreset.displayName(for: id) : name))
+                }
+                state.capabilities.surroundPresets = presets
+            case 0x02:
+                let type = try r.u8()
+                state.capabilities.soundPositions = type == 0x01 ? SoundPosition.allCases : []
+            default: break
+            }
+        case 0x43, 0x45:
+            let type = try r.u8()
+            let status = try r.u8()
+            let available: Bool? = status <= 1 ? status == 0 : nil
+            if type == 0x01 { state.surroundAvailable = available }
+            if type == 0x02 { state.soundPositionAvailable = available }
+        case 0x47, 0x49:
+            let type = try r.u8()
+            let preset = try r.u8()
+            if type == 0x01 { state.surroundPreset = preset }
+            if type == 0x02 { state.soundPosition = SoundPosition(rawValue: preset) }
         case 0x51:
             try parseEqualizerCapability(&r)
         case 0x53, 0x55:
-            _ = try r.u8()
-            state.equalizerAvailable = try r.u8() == 0x00
+            guard try r.u8() == eqInquiredType else { return }
+            state.equalizerAvailable = nil
+            state.equalizerBank = nil
+            let status = try r.u8()
+            guard r.isAtEnd, status <= 1 else { throw DriverError.malformed("EQ availability") }
+            state.equalizerAvailable = status == 0
         case 0x57, 0x59:
-            _ = try r.u8()
+            guard try r.u8() == eqInquiredType, let cap = state.capabilities.equalizer else { return }
+            state.equalizerBank = nil
+            state.equalizer = nil
             let preset = try r.u8()
             let count = Int(try r.u8())
             let raw = try r.take(count).map { Int($0) - eqStepCenter }
-            var eq = state.equalizer ?? EqualizerState(presetID: preset, bands: [], clearBass: nil)
-            eq.presetID = preset
-            if count == 6 {
-                eq.clearBass = raw[0]
-                eq.bands = Array(raw[1...])
-            } else if count > 0 {
-                eq.bands = raw
+            guard r.isAtEnd, cap.presets.contains(where: { $0.id == preset }),
+                  count == 0 || count == cap.bandCount + (cap.hasClearBass ? 1 : 0),
+                  raw.allSatisfy(cap.bandRange.contains) else { throw DriverError.malformed("EQ curve") }
+            var eq = EqualizerState(presetID: preset, bands: [], clearBass: nil)
+            if count > 0 {
+                if cap.hasClearBass { eq.clearBass = raw[0]; eq.bands = Array(raw.dropFirst()) }
+                else { eq.bands = raw }
+                try EqualizerBank.validateCurve(eq, capability: cap)
             }
             state.equalizer = eq
         case 0x61:
             try parseNoiseCapability(&r)
         case 0x63, 0x65:
-            break // NC/ASM enabled status; the headset rejects writes itself when disabled.
+            guard p.byte(1) == ncInquiredType else { return }
+            state.noiseAvailable = p.count == 3 && p[2] <= 1 ? p[2] == 0 : nil
         case 0x67, 0x69:
             try parseNoise(&r)
         case 0x81:
-            state.capabilities.ncOptimizer = true
+            if let capability = V1NoiseOptimizer.capability(p) {
+                state.capabilities.ncOptimizer = true
+                state.capabilities.ncOptimizerCapability = capability
+            }
         case 0x83, 0x85:
-            _ = try r.u8(); _ = try r.u8()
-            switch try r.u8() {
-            case 0x00: state.optimizer = state.optimizer == .running ? .finished : .idle
-            case 0x11: state.optimizer = .finished
-            default: state.optimizer = .running
+            if let status = V1NoiseOptimizer.status(p) {
+                state.optimizerAvailable = status.available
+                state.optimizer = status.phase
             }
         case 0x87, 0x89:
-            _ = try r.u8(); _ = try r.u8(); _ = try r.u8(); _ = try r.u8()
-            let barometric = Int(try r.u8())
-            state.optimizerMeasuredPressure = barometric == 0 ? nil : barometric
+            if let values = V1NoiseOptimizer.measurements(p, capability: state.capabilities.ncOptimizerCapability) {
+                state.optimizerPersonalMeasured = values.personal
+                state.optimizerMeasuredPressure = values.pressure
+            }
         case 0xA1:
             state.capabilities.playback = true
         case 0xA3, 0xA5:
-            _ = try r.u8(); _ = try r.u8()
-            state.nowPlaying.status = PlaybackStatus(rawValue: try r.u8())
+            guard p.count >= 2, p[1] == 0x01 else { return }
+            // Playback-controller status: inquiry, availability, playback state.
+            let status = p.count == 4 && p[2] == 0x00 ? PlaybackStatus(rawValue: p[3]) : nil
+            state.nowPlaying.receivePlaybackStatus(status)
         case 0xA7, 0xA9:
-            _ = try r.u8()
-            let detail = try r.u8()
+            guard p.count >= 2, p[1] == 1 else { return }
+            guard let detail = p.byte(2) else { invalidatePlaybackNames(); return }
             if detail == 0x20 {
-                state.nowPlaying.volume = Int(try r.u8())
-            } else if command == 0xA9 {
-                scheduleNameRefresh() // V1 name notifications carry no text.
-            } else {
-                let status = try r.u8()
-                let text = try r.string()
-                let value = status == 0x02 && !text.isEmpty ? text : nil
-                switch detail {
-                case 0x00: state.nowPlaying.title = value
-                case 0x01: state.nowPlaying.album = value
-                case 0x02: state.nowPlaying.artist = value
-                default: break
+                guard p.count == 4 else { return }
+                state.nowPlaying.volume = Int(p[3])
+            } else if detail <= 2 {
+                if command == 0xA9 {
+                    invalidatePlaybackNames() // Notifications contain a selector, no text.
+                    if p.count == 3 { scheduleNameRefresh() }
+                } else {
+                    do {
+                        var nameReader = ByteReader(p, offset: 3)
+                        let name = try PlaybackName.read(&nameReader)
+                        guard nameReader.isAtEnd else { throw DriverError.malformed("playback name length") }
+                        // Clear the previous snapshot even while only the first new field is available.
+                        state.nowPlaying.receiveMetadata(nil)
+                        if let metadata = metadataBatch.receive(detail: detail, name: name) {
+                            state.nowPlaying.receiveMetadata(metadata)
+                        }
+                    } catch {
+                        invalidatePlaybackNames()
+                        throw error
+                    }
                 }
             }
         case 0xD1:
@@ -482,18 +720,35 @@ final class V1Driver: HeadphoneDriver {
             let key = try r.string()
             let summary = try r.string()
             let settingType = try r.u8()
+            var options: [GeneralSettingOption] = []
+            if settingType == 0x02 {
+                let count = try r.u8()
+                guard count > 0, count <= 64 else { throw DriverError.malformed("general setting list size") }
+                for index in 0..<count {
+                    _ = try r.u8() // string format; keys and literal labels share the same wire layout
+                    let optionKey = try r.string()
+                    let optionSummary = try r.string()
+                    options.append(GeneralSettingOption(index: index, key: optionKey, summaryKey: optionSummary))
+                }
+            }
             var setting = state.setting(slot: slot) ?? GeneralSetting(slot: slot, key: key, summaryKey: summary, isBoolean: false, value: nil)
             setting.key = key
             setting.summaryKey = summary
             setting.isBoolean = settingType == 0x01
+            setting.options = options
+            if !setting.isBoolean { setting.value = nil }
+            if !options.contains(where: { $0.index == setting.selectedIndex }) { setting.selectedIndex = nil }
             state.upsertSetting(setting)
             if !state.capabilities.generalSettingSlots.contains(slot) { state.capabilities.generalSettingSlots.append(slot) }
         case 0xD7, 0xD9:
             let slot = try r.u8()
             let settingType = try r.u8()
             let value = try r.u8()
-            var setting = state.setting(slot: slot) ?? GeneralSetting(slot: slot, key: "", summaryKey: "", isBoolean: settingType == 0x01, value: nil)
-            if settingType == 0x01 { setting.value = value == 0x01 }
+            guard var setting = state.setting(slot: slot) else { break }
+            if settingType == 0x01, setting.isBoolean, value <= 1 { setting.value = value == 0x01 }
+            if settingType == 0x02, setting.isList {
+                setting.selectedIndex = setting.options.contains(where: { $0.index == value }) ? value : nil
+            }
             state.upsertSetting(setting)
         case 0xE1:
             switch try r.u8() {
@@ -514,6 +769,7 @@ final class V1Driver: HeadphoneDriver {
                 upscaling.enabled = value == 0x01
                 if !upscaling.enabled { upscaling.active = false }
                 state.upscaling = upscaling
+                state.settingReadbacks.insert(.upscalingEnabled)
             }
         case 0xF1:
             try parseSystemCapability(&r)
@@ -527,6 +783,7 @@ final class V1Driver: HeadphoneDriver {
             stc.voiceFocus = try r.u8() == 0x01
             stc.timeout = ChatTimeout(rawValue: try r.u8())
             state.speakToChat = stc
+            state.settingReadbacks.insert(.speakToChatOptions)
         case 0x99:
             _ = try r.u8()
             let message = try r.u8()
@@ -535,6 +792,12 @@ final class V1Driver: HeadphoneDriver {
         default:
             break
         }
+    }
+
+    func voiceGuidancePayload(_ enabled: Bool) throws -> [UInt8] {
+        guard supports(Function.voiceGuidance), state.capabilities.voiceGuidance,
+              state.voiceGuidanceDetails.onOffAvailable == true else { throw DriverError.unsupported("Voice guidance") }
+        return [0x48, 0x01, 0x01, enabled ? 0x01 : 0x00]
     }
 
     private func handleTable2(_ command: UInt8, _ p: [UInt8]) throws {
@@ -558,17 +821,32 @@ final class V1Driver: HeadphoneDriver {
             }
             state.pairedDevices = devices
         case 0x41:
-            state.capabilities.voiceGuidance = true
-        case 0x47, 0x49:
-            _ = try r.u8()
-            if try r.u8() == 0x01 { state.voiceGuidance = try r.u8() == 0x01 }
+            let capability = try V1VoiceGuidance.capability(p)
+            if state.capabilities.voiceGuidanceCapability != capability {
+                state.voiceGuidanceDetails = VoiceGuidanceDetails()
+                state.voiceGuidance = nil
+            }
+            state.capabilities.voiceGuidanceCapability = capability
+            state.capabilities.voiceGuidance = capability.supportsOnOff
+        case 0x43, 0x45, 0x47, 0x49:
+            guard let reply = try V1VoiceGuidance.reply(p) else { return }
+            switch reply {
+            case .onOff(let value): state.voiceGuidance = value
+            case .language(let language): state.voiceGuidanceDetails.language = language
+            case .requiredTime(let value): state.voiceGuidanceDetails.requiredTime = value
+            case .downloadService(let service): state.voiceGuidanceDetails.downloadService = service
+            case .updateMethod(let method): state.voiceGuidanceDetails.updateMethod = method
+            case .onOffAvailable(let value): state.voiceGuidanceDetails.onOffAvailable = value
+            case .languageUpdateEnabled(let value): state.voiceGuidanceDetails.languageUpdateEnabled = value
+            }
         default:
             break
         }
     }
 
     private func parseEqualizerCapability(_ r: inout ByteReader) throws {
-        _ = try r.u8()
+        let type = try r.u8()
+        guard type == 1 || type == 3 else { return } // 2 is EBB, with a different layout.
         let bandCount = Int(try r.u8())
         let steps = Int(try r.u8())
         let presetCount = Int(try r.u8())
@@ -576,16 +854,25 @@ final class V1Driver: HeadphoneDriver {
         for _ in 0..<presetCount {
             let id = try r.u8()
             let name = try r.string()
+            guard id != 0xFF else { throw DriverError.malformed("unspecified EQ preset in capability") }
             presets.append(EqualizerPreset(id: id, name: name.isEmpty ? EqualizerPreset.displayName(for: id) : name))
         }
-        eqStepCenter = max(1, (steps - 1) / 2)
+        guard r.isAtEnd, !presets.isEmpty, Set(presets.map(\.id)).count == presets.count else {
+            throw DriverError.malformed("EQ capability")
+        }
+        let center = max(0, (steps - 1) / 2)
         let hasClearBass = bandCount == 6
-        state.capabilities.equalizer = EqualizerCapability(
-            presets: presets,
-            bandCount: hasClearBass ? 5 : bandCount,
-            bandRange: -eqStepCenter...eqStepCenter,
-            hasClearBass: hasClearBass
-        )
+        let supportedCurve = (hasClearBass && steps == 21)
+            || ([5, 10].contains(bandCount) && steps >= 3 && steps % 2 == 1)
+        let editable = type == 1 && supportedCurve
+        eqStepCenter = center
+        eqInquiredType = type
+        state.equalizer = nil
+        state.equalizerAvailable = nil
+        state.equalizerBank = nil
+        state.capabilities.equalizer = EqualizerCapability(presets: presets,
+            bandCount: hasClearBass ? 5 : bandCount, bandRange: -center...center, hasClearBass: hasClearBass,
+            supportsCustomBank: editable, supportsBandEditing: editable)
     }
 
     private func parseNoiseCapability(_ r: inout ByteReader) throws {
@@ -623,26 +910,36 @@ final class V1Driver: HeadphoneDriver {
 
     private func parseNoise(_ r: inout ByteReader) throws {
         let type = try r.u8()
+        guard type == ncInquiredType else { return }
+        let previous = state.noise
+        state.noise = nil
         guard type == 0x02 else {
             // NC-only / ASM-only variants: [type, effect, …]
             let effect = try r.u8()
             let mode: NoiseMode = effect == 0x00 ? .off : (type == 0x01 ? .noiseCancelling : .ambient)
-            state.noise = NoiseControl(mode: mode, ambientLevel: state.noise?.ambientLevel ?? 1, focusOnVoice: false)
+            state.noise = NoiseControl(mode: mode, ambientLevel: previous?.ambientLevel ?? 1, focusOnVoice: false)
             return
         }
         let effect = try r.u8()
-        _ = try r.u8()
+        let ncType = try r.u8()
         let ncValue = try r.u8()
-        _ = try r.u8()
+        let asmType = try r.u8()
         let asmID = try r.u8()
         let asmValue = Int(try r.u8())
-        let previous = state.noise
-        let level = asmValue > 0 ? asmValue : (previous?.ambientLevel ?? state.capabilities.noise?.ambientRange.upperBound ?? 20)
-        let configured: NoiseMode = switch ncValue {
-        case 0x02: .noiseCancelling
-        case 0x01: .windReduction
-        default: .ambient
+        guard r.remaining == 0, let cap = state.capabilities.noise,
+              [0x00, 0x01, 0x10, 0x11].contains(effect),
+              ncType == state.v1NcSettingType, asmType == state.v1AsmSettingType,
+              ncType <= 2, asmType <= 1, asmID <= 1,
+              ncType == 1 || ncValue <= (ncType == 2 ? 2 : 1),
+              asmID == 0 || cap.supportsVoiceFocus,
+              asmValue == 0 || cap.ambientRange.contains(asmValue),
+              effect == 0 || ncValue != 0 || asmValue > 0 else {
+            throw DriverError.malformed("NC/ambient values or setting types")
         }
+        if asmValue > 0 { lastReportedAmbientLevel = asmValue }
+        let level = asmValue > 0 ? asmValue : (previous?.ambientLevel ?? lastReportedAmbientLevel ?? cap.ambientRange.upperBound)
+        let configured: NoiseMode = ncValue == 0 ? .ambient
+            : (ncType == 2 && ncValue == 1 ? .windReduction : .noiseCancelling)
         var value = NoiseControl(mode: effect == 0x00 ? .off : configured, ambientLevel: level, focusOnVoice: asmID == 0x01)
         value.lastActiveMode = configured
         state.noise = value
@@ -701,6 +998,7 @@ final class V1Driver: HeadphoneDriver {
             var stc = state.speakToChat ?? SpeakToChat(enabled: false)
             stc.enabled = try r.u8() == 0x01
             state.speakToChat = stc
+            state.settingReadbacks.insert(.speakToChatEnabled)
         case 0x06:
             let count = Int(try r.u8())
             state.assignablePresets = try r.take(count)
@@ -714,12 +1012,11 @@ final class V1Driver: HeadphoneDriver {
         nameRefreshScheduled = true
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
-            guard let self, !self.link.isClosed else { return }
+            guard let self else { return }
             self.nameRefreshScheduled = false
+            guard !self.link.isClosed else { return }
             try? await self.link.exclusive {
-                for detail: UInt8 in [0x00, 0x01, 0x02] {
-                    _ = try await self.ask([0xA6, 0x01, detail], expect: .init(.dataMdr, 0xA7, 0x01, detail: detail))
-                }
+                try await self.refreshPlaybackNames()
             }
         }
     }
@@ -758,6 +1055,9 @@ final class V1Driver: HeadphoneDriver {
         0x10: "GET battery", 0x11: "RET battery", 0x13: "NTFY battery", 0x14: "GET DSEE effect",
         0x15: "RET DSEE effect", 0x17: "NTFY DSEE effect", 0x18: "GET codec", 0x19: "RET codec", 0x1B: "NTFY codec",
         0x22: "SET power off", 0x50: "GET EQ capability", 0x51: "RET EQ capability", 0x52: "GET EQ status",
+        0x40: "GET sound effect capability", 0x41: "RET sound effect capability", 0x42: "GET sound effect status",
+        0x43: "RET sound effect status", 0x45: "NTFY sound effect status", 0x46: "GET sound effect",
+        0x47: "RET sound effect", 0x48: "SET sound effect", 0x49: "NTFY sound effect",
         0x53: "RET EQ status", 0x55: "NTFY EQ status", 0x56: "GET EQ", 0x57: "RET EQ", 0x58: "SET EQ", 0x59: "NTFY EQ",
         0x60: "GET NC/ASM capability", 0x61: "RET NC/ASM capability", 0x62: "GET NC/ASM status", 0x63: "RET NC/ASM status",
         0x65: "NTFY NC/ASM status", 0x66: "GET NC/ASM", 0x67: "RET NC/ASM", 0x68: "SET NC/ASM", 0x69: "NTFY NC/ASM",

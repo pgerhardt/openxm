@@ -14,13 +14,23 @@ A native SwiftUI app with local Bluetooth control, noise canceling, ambient soun
 
 - **Noise control:** noise canceling, wind reduction, ambient level, and Focus on Voice where the headset supports them.
 - **Equalizer:** presets, a custom curve, Clear Bass, and locally saved curves. XM3/XM4 use five bands plus bass.
-- **Sound and device settings:** DSEE, codec display, Speak-to-Chat (XM4), wearing detection, automatic power off, and other reported capabilities.
-- **Scenes:** save combinations of settings and apply them manually, on connection, on a schedule, or on app activation.
+- **Find Your Equalizer (unreleased, WH-1000XM3):** guided listening comparisons for sound balance, bass and detail, with original/result comparison and a verified Custom 2 save. Cancel restores the original EQ bank; interrupted sessions retain a local recovery file. Uses independently designed comparisons, without starting playback or changing volume.
+- **Sound and device settings:** DSEE, Speak-to-Chat (XM4), wearing detection, automatic power off, and other reported capabilities.
+- **Audio connection:** a live My Device card shows the headphone-reported music codec, Mac output sample rate/channels and headphone microphone activity. Automatic mode uses read-only route checks. An unreleased, opt-in XM3 codec selector adds SBC, AAC, aptX, aptX HD and LDAC through a separate experimental transmitter and virtual audio driver, with live media bitrate and encoder-target readings. All five codecs, Sony control coexistence and return to native AAC have been checked on one XM3. See [codec transport](docs/CODEC-TRANSPORT.md) for evidence and remaining limitations.
+- **Scenes:** save combinations of settings and apply them manually, on connection, on a schedule, or on app activation. Unreleased place triggers add arrival/departure with explicit location permission and stable boundary detection; see [location scenes](docs/LOCATION-SCENES.md).
+- **Legacy XM3 settings (unreleased):** device-supplied NC/AMBIENT button choices, Surround/VPT and Sound Position Control. Protocol tests pass; hardware write validation is pending. Sound effects also work with scenes.
+- **Listening history (unreleased):** opt-in daily playback-time estimates, separate opt-in session times, history charts, model/date filters and a browsable usage log. Preserves legacy totals and recorded time zones, with session-aware backup merging. A separate, default-off song-history option saves available titles, artists, albums, sources and intervals, with search and source filters. Mac metadata requires a matching player audio route; unknown sources leave gaps. No cloud sync. See [recording and retention](docs/LISTENING-HISTORY.md).
+- **App-data backup (unreleased):** export scenes, saved places and listening history while offline. Review and merge selected data, keep imported automatic triggers disabled, and preserve recording/location preferences. Original files are retained for recovery; repeat imports do not add overlapping daily listening totals. Files use OpenXM's own format, without Sony cloud interoperability.
+- **Settings backup (unreleased):** save readable settings, the reported V1 voice-language selection and the active EQ curve, optionally including all custom EQ slots on V1 headphones and standard customizable V2 EQ. Preview compatibility and restore selected values with read-back, preset-switch persistence and reconnect checks. Collecting inactive curves briefly selects each preset and restores the original selection. A saved language opens a separate package review; ordinary settings restoration never uploads a language package. Downloaded voice packages can be exported and reopened separately with their original metadata, notices and provenance. Hidden ambient preferences, calibration and Sony account sync remain incomplete; physical restoration is not yet verified.
 - **Menu bar:** quick controls, battery, EQ, and scenes without leaving your current app.
+- **Voice language (unreleased):** display V1 installed/supported languages and check/download original packages using a fresh international XM3 service mapping. Show Sony's localized preparation instructions and integrity-checked notice; preserve original package/notice bytes, metadata, hashes and provenance. A read-only preparation check rereads the headset, enforces its update method and battery threshold, and revalidates saved files. An experimental install/resume flow adds final confirmation, a separate session journal and post-install language verification. Live XM3 package and installation validation remain pending. See [protocol evidence](docs/VOICE-GUIDANCE.md).
+- **Headphone firmware (unreleased, experimental):** check regional Sony metadata and select from ten pinned international, Japanese and Chinese XM3 packages, then install or resume from Settings. Upgrades, downgrades and region changes are experimental; only international 4.5.2 → 2.0.0 has a physical installation result.
 - **Mac integration:** keyboard shortcuts, reconnection, optional launch at login, and local Now Playing controls.
+- **Audio recovery (unreleased):** unexpected custom-codec audio loss pauses a verified active media player before restoring an available output. Codec switches remain quiet. If pause cannot be confirmed, use Restore audio anyway or choose an output; reconnecting never automatically starts playback. Physical disconnect/pause validation is pending.
+- **Saved codec (unreleased):** the preferred codec is remembered per headphone and restored once after launch when those headphones connect. Choosing Automatic saves that choice; quitting or losing the connection preserves the preference. Sample-rate and LDAC settings also persist.
 - **Honest feedback:** setting read-back where supported and Activity entries for confirmed, adjusted, failed, or unconfirmed changes.
 
-The native app talks to the headset; the website's interactive controls are an illustrative preview. No firmware updater or additional macOS codecs are included.
+The native app talks to the headset; the website's interactive controls are an illustrative preview. An [experimental Mac-only firmware tool](docs/FIRMWARE.md) has completed an international WH-1000XM3 downgrade from 4.5.2 to 2.0.0, including restart, completion and independent version read-back. The tool also implements transitions among ten original international, Japanese and Chinese packages, with explicit cross-region warnings and regional read-back. Those other paths have automated coverage but await physical installation tests. Other models and unlisted firmware remain unsupported. The separate experimental codec transport does not modify headphone firmware or add codecs to Apple's system Bluetooth stack.
 
 ## Install
 
@@ -77,7 +87,7 @@ GitHub Pages publishes `website/dist` on pushes to `main`. A separate private Si
 | Model | This project's status |
 | --- | --- |
 | **WH-1000XM4** | Primary target. The upstream project reports hardware-tested V1 controls on firmware 2.6.0; this fork needs its own hardware pass. |
-| **WH-1000XM3** | V1 target. Shared protocol and capability-driven controls; packet parsing is regression-tested, actual headphone operation is not yet verified in this fork. |
+| **WH-1000XM3** | Core controls tested on firmware 4.5.2: noise modes, EQ, DSEE HX, touch panel, voice guidance, auto-off settings, and scenes. Requires the local Off-to-active noise fix, not yet in release 0.2.0. See the [hardware evaluation](docs/XM3-HARDWARE-EVALUATION.md) for exact coverage and limitations. |
 | **WH-1000XM5 / XM6** | Experimental inherited V2 implementation; not hardware verified here. |
 | Other Sony models | No compatibility promise. Controls appear only for reported capabilities. |
 
@@ -101,7 +111,9 @@ Headphone communication is local Bluetooth. Scenes live in `~/Library/Applicatio
 
 Update checks are **off by default**. If enabled, the app reads the public GitHub Releases API for `pgerhardt/openxm` at most daily, without sending headphone data. Manual update checks use the same endpoint. No automatic download or installation occurs.
 
-Now Playing reads local macOS metadata with the bundled MediaRemote Adapter; it stores no listening history. The helper uses a private macOS interface and may break after OS updates. Diagnostics can contain Bluetooth addresses and media metadata: redact before sharing.
+Headphone firmware checks and downloads are separate, explicit actions. They read Sony's public metadata and packages for the selected XM3 region, or the pinned MDR Proxy GitHub archive for international 2.0.0, without sending device identifiers or credentials. Verified packages are cached under `~/Library/Application Support/SoundConnect/Firmware`. Installation requires a further confirmation and live device checks.
+
+Now Playing reads local macOS metadata with the bundled MediaRemote Adapter. Track details are saved only when the separate song-history option is enabled; daily/session history does not enable it. The helper uses a private macOS interface and may break after OS updates. Diagnostics can contain Bluetooth addresses and media metadata: redact before sharing.
 
 ## Troubleshooting
 

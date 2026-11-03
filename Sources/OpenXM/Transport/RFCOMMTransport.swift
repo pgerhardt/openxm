@@ -64,7 +64,8 @@ protocol RFCOMMTransportDelegate: AnyObject {
 @MainActor
 final class RFCOMMTransport: NSObject {
     let device: IOBluetoothDevice
-    let family: ProtocolFamily
+    /// Nil for the separate CSR GAIA firmware service. Never attach an MDR driver to that service.
+    let family: ProtocolFamily?
     let channelID: BluetoothRFCOMMChannelID
     weak var delegate: RFCOMMTransportDelegate?
 
@@ -77,7 +78,7 @@ final class RFCOMMTransport: NSObject {
     static let openTimeout: TimeInterval = 12
     static let sdpTimeout: TimeInterval = 12
 
-    private init(device: IOBluetoothDevice, family: ProtocolFamily, channelID: BluetoothRFCOMMChannelID) {
+    private init(device: IOBluetoothDevice, family: ProtocolFamily?, channelID: BluetoothRFCOMMChannelID) {
         self.device = device
         self.family = family
         self.channelID = channelID
@@ -108,6 +109,28 @@ final class RFCOMMTransport: NSObject {
             if record.getRFCOMMChannelID(&channel) == kIOReturnSuccess { return (family, channel) }
         }
         return nil
+    }
+
+    static let gaiaUUID = IOBluetoothSDPUUID(bytes: [UInt8](arrayLiteral:
+        0x7B, 0x26, 0x5B, 0x0E, 0x22, 0x32, 0x4D, 0x45,
+        0xBE, 0xF4, 0xBB, 0x8A, 0xE6, 0x2F, 0x81, 0x3D), length: 16)
+
+    static func openGAIA(device: IOBluetoothDevice, allowBasebandConnect: Bool = false) async throws -> RFCOMMTransport {
+        guard IOBluetoothHostController.default()?.powerState == kBluetoothHCIPowerStateON else {
+            throw TransportError.bluetoothUnavailable
+        }
+        if !device.isConnected() && !allowBasebandConnect { throw TransportError.notConnected }
+        // XM3 was observed moving GAIA from channel 1 to 18. Cached records can remain stale even
+        // though MDR still works, so resolve this service live before every firmware connection.
+        try await SDPQuery.run(on: device, timeout: sdpTimeout, uuids: nil)
+        var channel: BluetoothRFCOMMChannelID = 0
+        guard let record = device.getServiceRecord(for: gaiaUUID),
+              record.getRFCOMMChannelID(&channel) == kIOReturnSuccess else {
+            throw FirmwareError.invalid("The headphones do not expose the CSR GAIA firmware service.")
+        }
+        let transport = RFCOMMTransport(device: device, family: nil, channelID: channel)
+        try await transport.openChannel()
+        return transport
     }
 
     static func publishesSonyService(_ device: IOBluetoothDevice) -> Bool {
@@ -264,13 +287,14 @@ private final class SDPQuery: NSObject {
     private let shot = OneShot<Void>()
     private static var inFlight: [SDPQuery] = []
 
-    static func run(on device: IOBluetoothDevice, timeout: TimeInterval) async throws {
+    static func run(on device: IOBluetoothDevice, timeout: TimeInterval,
+                    uuids: [IOBluetoothSDPUUID]? = [ProtocolFamily.v2.sdpUUID, ProtocolFamily.v1.sdpUUID]) async throws {
         let query = SDPQuery()
         inFlight.append(query)
         defer { inFlight.removeAll { $0 === query } }
         let shot = query.shot
         try await withTaskCancellationHandler {
-            let status = device.performSDPQuery(query, uuids: [ProtocolFamily.v2.sdpUUID, ProtocolFamily.v1.sdpUUID])
+            let status = uuids.map { device.performSDPQuery(query, uuids: $0) } ?? device.performSDPQuery(query)
             if status != kIOReturnSuccess {
                 shot.resolve(.failure(TransportError.sdpFailed(status)))
             } else {

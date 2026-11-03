@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>OpenXMCodec</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.pgerhardt.OpenXM.codec.driver</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>OpenXM Headphones</string>
+	<key>CFBundlePackageType</key>
+	<string>BNDL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1</string>
+	<!-- Increment when driver behavior or the contract with the app (VirtualDeviceProtocol.h) changes; the app uses it to prompt for an update -->
+	<key>CFBundleVersion</key>
+	<string>6</string>
+	<key>CFPlugInFactories</key>
+	<dict>
+		<key>AA09598D-8F4D-4AD4-A14A-4851B641FE97</key>
+		<string>BlueBloom_Create</string>
+	</dict>
+	<key>CFPlugInTypes</key>
+	<dict>
+		<!-- kAudioServerPlugInTypeUUID (CoreAudio/AudioServerPlugIn.h) -->
+		<key>443ABAB8-E7B3-491A-B985-BEB9187030DB</key>
+		<array>
+			<string>AA09598D-8F4D-4AD4-A14A-4851B641FE97</string>
+		</array>
+	</dict>
+</dict>
+</plist>

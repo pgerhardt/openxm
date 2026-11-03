@@ -1,0 +1,356 @@
+{
+  "model": "WH-1000XM3",
+  "category": "HP001",
+  "checked_on": "2026-10-29",
+  "scope": "Japanese and Chinese regional firmware; international files remain in ../xm3/. Regions are separate and are not asserted interchangeable.",
+  "firmware": [
+    {
+      "version": "4.1.1",
+      "region": "japan",
+      "category": "HP001",
+      "service_id": "MDRID291601",
+      "status": "downloaded",
+      "file": "japan-MDRID291601/HDX-2916_V0411_SPLC.bin",
+      "original_filename": "HDX-2916_V0411_SPLC.bin",
+      "source_url": "https://info.update.sony.net/HP001/MDRID291601/contents/0003/HDX-2916_V0411_SPLC.bin",
+      "final_url": "https://info.update.sony.net/HP001/MDRID291601/contents/0003/HDX-2916_V0411_SPLC.bin",
+      "source": "Sony HTTPS download",
+      "downloaded_on": "2026-10-29",
+      "size_bytes": 2916572,
+      "sha256": "21920e5df9ec03852249e22bb1f20e208fbda95b38cafbec6b23e066cccdfdb4",
+      "sha1": "ae287fb4fbcf916df611b3749a42e2c24649edcf",
+      "md5": "0004b0d1a05c8358dfe8a9e59be456e4",
+      "variant": "ZARKOV77",
+      "container_records": [
+        {
+          "type": "APPUHDR2",
+          "offset": 0,
+          "size_bytes": 36
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 48,
+          "size_bytes": 1098128
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 1098188,
+          "size_bytes": 456516
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 1554716,
+          "size_bytes": 75956
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 1630684,
+          "size_bytes": 1285736
+        },
+        {
+          "type": "APPUPFTR",
+          "offset": 2916432,
+          "size_bytes": 128
+        }
+      ],
+      "verification": {
+        "complete_container_parse": true,
+        "firmware_signature_verified": false
+      }
+    },
+    {
+      "version": "4.2.2",
+      "region": "japan",
+      "category": "HP001",
+      "service_id": "MDRID291601",
+      "status": "downloaded",
+      "file": "japan-MDRID291601/HDX-2916_V0422_SPLC.bin",
+      "original_filename": "HDX-2916_V0422_SPLC.bin",
+      "source_url": "https://info.update.sony.net/HP001/MDRID291601/contents/0004/HDX-2916_V0422_SPLC.bin",
+      "final_url": "https://info.update.sony.net/HP001/MDRID291601/contents/0004/HDX-2916_V0422_SPLC.bin",
+      "source": "Sony HTTPS download",
+      "downloaded_on": "2026-10-29",
+      "size_bytes": 2917412,
+      "sha256": "4d28f46b1f768a1872012723d449eb328341bcf120a7b96f6ae39d169e0d9f30",
+      "sha1": "e22d26ddf7a9f22a65eb4c870a0a7efa6c02145f",
+      "md5": "a77475c048bd080e89b31bb2c44b5f6c",
+      "variant": "ZARKOV77",
+      "container_records": [
+        {
+          "type": "APPUHDR2",
+          "offset": 0,
+          "size_bytes": 36
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 48,
+          "size_bytes": 1098968
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 1099028,
+          "size_bytes": 456516
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 1555556,
+          "size_bytes": 75956
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 1631524,
+          "size_bytes": 1285736
+        },
+        {
+          "type": "APPUPFTR",
+          "offset": 2917272,
+          "size_bytes": 128
+        }
+      ],
+      "verification": {
+        "complete_container_parse": true,
+        "firmware_signature_verified": false
+      }
+    },
+    {
+      "version": "4.5.2",
+      "region": "japan",
+      "category": "HP001",
+      "service_id": "MDRID291601",
+      "status": "downloaded",
+      "file": "japan-MDRID291601/HDX-2916_V0452_SPLC_with_stack.bin",
+      "original_filename": "HDX-2916_V0452_SPLC_with_stack.bin",
+      "source_url": "https://info.update.sony.net/HP001/MDRID291601/contents/0005/HDX-2916_V0452_SPLC_with_stack.bin",
+      "final_url": "https://info.update.sony.net/HP001/MDRID291601/contents/0005/HDX-2916_V0452_SPLC_with_stack.bin",
+      "source": "Sony HTTPS download",
+      "downloaded_on": "2026-10-29",
+      "size_bytes": 3776802,
+      "sha256": "43cd4e1672c4c2c39a2133f83da95d81f12bfacab716e4eacf63275524a77ace",
+      "sha1": "eb3bfb60bd634e99a9f5595a152203f029aeefad",
+      "md5": "d80a224135c0f1e7f8299e444a59bb82",
+      "variant": "ZARKOV77",
+      "container_records": [
+        {
+          "type": "APPUHDR2",
+          "offset": 0,
+          "size_bytes": 36
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 48,
+          "size_bytes": 1958358
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 1958418,
+          "size_bytes": 456516
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 2414946,
+          "size_bytes": 75956
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 2490914,
+          "size_bytes": 1285736
+        },
+        {
+          "type": "APPUPFTR",
+          "offset": 3776662,
+          "size_bytes": 128
+        }
+      ],
+      "verification": {
+        "complete_container_parse": true,
+        "firmware_signature_verified": false,
+        "sony_metadata_size_and_sha1_match": true,
+        "matches_preserved_github_git_blob": "cc4d4624eb03834b6cec06e609dbe0acb85502eb"
+      },
+      "sony_metadata_url": "https://info.update.sony.net/HP001/MDRID291601/info/info.xml",
+      "matching_archive_url": "https://raw.githubusercontent.com/lzghzr/MDR_Proxy/2e80d32e05f55ebf354389283e767e5a7c273e27/firmware/2916/MDRID291601/HDX-2916_V0452_SPLC_with_stack.eb3bfb60bd634e99a9f5595a152203f029aeefad.bin"
+    },
+    {
+      "version": "4.1.3",
+      "region": "china",
+      "category": "HP001",
+      "service_id": "MDRID291602",
+      "status": "downloaded",
+      "file": "china-MDRID291602/HDX-2916_V0413_CN.bin",
+      "original_filename": "HDX-2916_V0413_CN.bin",
+      "source_url": "https://info.update.sony.net/HP001/MDRID291602/contents/0001/HDX-2916_V0413_CN.bin",
+      "final_url": "https://info.update.sony.net/HP001/MDRID291602/contents/0001/HDX-2916_V0413_CN.bin",
+      "source": "Sony HTTPS download",
+      "downloaded_on": "2026-10-29",
+      "size_bytes": 2747762,
+      "sha256": "14eccb2ab8e4fe6c9a14598956b5fc7bb456ea5cb7398b97f4274da2b3595f71",
+      "sha1": "088c2559b0c18c8933124fd57f1ae6318b089014",
+      "md5": "e537624a92764a7b0f2c4f4117dff231",
+      "variant": "ZARKOV77",
+      "container_records": [
+        {
+          "type": "APPUHDR2",
+          "offset": 0,
+          "size_bytes": 36
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 48,
+          "size_bytes": 1042914
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 1042974,
+          "size_bytes": 460100
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 1503086,
+          "size_bytes": 45176
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 1548274,
+          "size_bytes": 1199336
+        },
+        {
+          "type": "APPUPFTR",
+          "offset": 2747622,
+          "size_bytes": 128
+        }
+      ],
+      "verification": {
+        "complete_container_parse": true,
+        "firmware_signature_verified": false,
+        "matches_preserved_github_git_blob": "8b83069d7f6f30183c34c91e3a2e8205103f56a9"
+      },
+      "matching_archive_url": "https://raw.githubusercontent.com/lzghzr/MDR_Proxy/2e80d32e05f55ebf354389283e767e5a7c273e27/firmware/2916/MDRID291602/HDX-2916_V0413_CN.088c2559b0c18c8933124fd57f1ae6318b089014.bin"
+    },
+    {
+      "version": "4.2.2",
+      "region": "china",
+      "category": "HP001",
+      "service_id": "MDRID291602",
+      "status": "downloaded",
+      "file": "china-MDRID291602/HDX-2916_V0422_CN.bin",
+      "original_filename": "HDX-2916_V0422_CN.bin",
+      "source_url": "https://info.update.sony.net/HP001/MDRID291602/contents/0002/HDX-2916_V0422_CN.bin",
+      "final_url": "https://info.update.sony.net/HP001/MDRID291602/contents/0002/HDX-2916_V0422_CN.bin",
+      "source": "Sony HTTPS download",
+      "downloaded_on": "2026-10-29",
+      "size_bytes": 2748326,
+      "sha256": "2f32b75762b9c5ec9007b30804c5b51138f76bd0a6e8614105a784f4f223ae91",
+      "sha1": "8e4642360f172e959e37ef8632a49f8302ed9e26",
+      "md5": "cd8a2a8d2f0fb330e033c23fa4e7049e",
+      "variant": "ZARKOV77",
+      "container_records": [
+        {
+          "type": "APPUHDR2",
+          "offset": 0,
+          "size_bytes": 36
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 48,
+          "size_bytes": 1043478
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 1043538,
+          "size_bytes": 460100
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 1503650,
+          "size_bytes": 45176
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 1548838,
+          "size_bytes": 1199336
+        },
+        {
+          "type": "APPUPFTR",
+          "offset": 2748186,
+          "size_bytes": 128
+        }
+      ],
+      "verification": {
+        "complete_container_parse": true,
+        "firmware_signature_verified": false
+      }
+    },
+    {
+      "version": "4.5.2",
+      "region": "china",
+      "category": "HP001",
+      "service_id": "MDRID291602",
+      "status": "downloaded",
+      "file": "china-MDRID291602/HDX-2916_V0452_CN_with_stack.bin",
+      "original_filename": "HDX-2916_V0452_CN_with_stack.bin",
+      "source_url": "https://info.update.sony.net/HP001/MDRID291602/contents/0003/HDX-2916_V0452_CN_with_stack.bin",
+      "final_url": "https://info.update.sony.net/HP001/MDRID291602/contents/0003/HDX-2916_V0452_CN_with_stack.bin",
+      "source": "Sony HTTPS download",
+      "downloaded_on": "2026-10-29",
+      "size_bytes": 3607712,
+      "sha256": "9192c308c3f0136599d2da74327f1418aa450df277c9403adc089b536dedbd21",
+      "sha1": "06f4c53ebb6e6042732dcf781caad60eb1d929f0",
+      "md5": "4c91e81427b861d18bfe07866870d526",
+      "variant": "ZARKOV77",
+      "container_records": [
+        {
+          "type": "APPUHDR2",
+          "offset": 0,
+          "size_bytes": 36
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 48,
+          "size_bytes": 1902864
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 1902924,
+          "size_bytes": 460100
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 2363036,
+          "size_bytes": 45176
+        },
+        {
+          "type": "PARTDATA",
+          "offset": 2408224,
+          "size_bytes": 1199336
+        },
+        {
+          "type": "APPUPFTR",
+          "offset": 3607572,
+          "size_bytes": 128
+        }
+      ],
+      "verification": {
+        "complete_container_parse": true,
+        "firmware_signature_verified": false,
+        "sony_metadata_size_and_sha1_match": true,
+        "matches_preserved_github_git_blob": "5c659b287a1f4272980f1aa21eae84d7f6106ebd"
+      },
+      "sony_metadata_url": "https://info.update.sony.net/HP001/MDRID291602/info/info.xml",
+      "matching_archive_url": "https://raw.githubusercontent.com/lzghzr/MDR_Proxy/2e80d32e05f55ebf354389283e767e5a7c273e27/firmware/2916/MDRID291602/HDX-2916_V0452_CN_with_stack.06f4c53ebb6e6042732dcf781caad60eb1d929f0.bin"
+    }
+  ],
+  "unavailable": [
+    {
+      "version": "2.0.0",
+      "region": "japan",
+      "service_id": "MDRID291601",
+      "status": "not_found",
+      "reason": "No payload in inspected collections. HDX-2916_V0200_SPLC.bin and HDX-2916_V0200.bin under contents/0000 through 0003 returned HTTP 404; known Wayback capture of contents/0002/HDX-2916_V0200_SPLC.bin is also a 404. This does not prove no copy exists elsewhere."
+    }
+  ],
+  "notes": [
+    "No 1.0.8 update package located for any region in the prior investigation.",
+    "Original bytes preserved; hashes identify downloaded bytes and are not independent Sony signature verification.",
+    "Adding files here does not enable regional firmware installation in the updater."
+  ]
+}

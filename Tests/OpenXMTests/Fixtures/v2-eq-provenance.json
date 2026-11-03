@@ -1,0 +1,33 @@
+{
+  "repository": "https://github.com/mos9527/SonyHeadphonesClient",
+  "commit": "68dfced0403b38114b77f2b374e606ce12a206a8",
+  "model": "WF-LC900",
+  "firmware": "2.0.3",
+  "scope": "Three original received EQ frames only; no physical OpenXM validation, ULT or error-status capture.",
+  "files": [
+    {
+      "name": "mdr-packet-1788897582356-000095-rx.type-DATA_MDR-0c.seq-00.cmd-EQEBB_RET_CAPABILITY-51.bin",
+      "url": "https://raw.githubusercontent.com/mos9527/SonyHeadphonesClient/68dfced0403b38114b77f2b374e606ce12a206a8/tests/WF-LC900-2.0.3-equalizer/mdr-packet-1788897582356-000095-rx.type-DATA_MDR-0c.seq-00.cmd-EQEBB_RET_CAPABILITY-51.bin",
+      "size": 30,
+      "localName": "wf-lc900-eq-capability.bin",
+      "gitBlobSHA1": "f1c17b8de2ff7ade35326c9298e3bba1fa5509e0",
+      "sha256": "87ce941b407876dfe01aa3e49b109e306978824de2ef72a4819cca772f4d15e2"
+    },
+    {
+      "name": "mdr-packet-1788897582517-000099-rx.type-DATA_MDR-0c.seq-01.cmd-EQEBB_RET_STATUS-53.bin",
+      "url": "https://raw.githubusercontent.com/mos9527/SonyHeadphonesClient/68dfced0403b38114b77f2b374e606ce12a206a8/tests/WF-LC900-2.0.3-equalizer/mdr-packet-1788897582517-000099-rx.type-DATA_MDR-0c.seq-01.cmd-EQEBB_RET_STATUS-53.bin",
+      "size": 12,
+      "localName": "wf-lc900-eq-status.bin",
+      "gitBlobSHA1": "23602a835b38d6ea3cd8de619f4c82a71d083647",
+      "sha256": "698a36f98170b9a5dac84c95106468220d0c8f3f06eccf6aa45a95b04f2e1962"
+    },
+    {
+      "name": "mdr-packet-1788897582700-000103-rx.type-DATA_MDR-0c.seq-00.cmd-EQEBB_RET_PARAM-57.bin",
+      "url": "https://raw.githubusercontent.com/mos9527/SonyHeadphonesClient/68dfced0403b38114b77f2b374e606ce12a206a8/tests/WF-LC900-2.0.3-equalizer/mdr-packet-1788897582700-000103-rx.type-DATA_MDR-0c.seq-00.cmd-EQEBB_RET_PARAM-57.bin",
+      "size": 23,
+      "localName": "wf-lc900-eq-parameter.bin",
+      "gitBlobSHA1": "b88f5f8f64c6d7cfa6c5795449a5cb1368f8ffa0",
+      "sha256": "637e7a2c22f7b02e4a4e148951b32691aacc5ed5013ea4c90adba521f303141a"
+    }
+  ]
+}

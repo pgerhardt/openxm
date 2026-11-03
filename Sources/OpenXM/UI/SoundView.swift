@@ -50,8 +50,14 @@ struct SoundView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.cardSpacing) {
                 PageHeader(title: "Sound")
+                if !caps.surroundPresets.isEmpty || !caps.soundPositions.isEmpty {
+                    LegacySoundEffectsCard()
+                }
                 if caps.equalizer != nil {
                     EqualizerEditorCard()
+                    if EqualizerGuideRecord.supported(controller.state) || controller.equalizerGuide.reserved {
+                        EqualizerGuideCard()
+                    }
                     SavedCurvesCard()
                 }
                 if caps.upscalingName != nil || caps.connectionPriority {
@@ -64,6 +70,50 @@ struct SoundView: View {
             .padding(Theme.pagePadding)
             .frame(maxWidth: 980, alignment: .leading)
             .frame(maxWidth: .infinity)
+        }
+    }
+}
+
+struct LegacySoundEffectsCard: View {
+    @Environment(HeadphoneController.self) private var controller
+
+    var body: some View {
+        let state = controller.state
+        let caps = state.capabilities
+        Card("Sound Effects", symbol: "speaker.wave.3") {
+            VStack(spacing: 16) {
+                if !caps.surroundPresets.isEmpty {
+                    SettingRow(symbol: "hifispeaker.2", title: "Surround (VPT)",
+                               detail: state.surroundAvailable == false ? "Unavailable with the current headphone settings." : nil) {
+                        Picker("Surround (VPT)", selection: Binding<UInt8?>(
+                            get: { state.surroundPreset },
+                            set: { if let id = $0 { controller.apply(.surroundPreset(id)) } }
+                        )) {
+                            if !caps.surroundPresets.contains(where: { $0.id == state.surroundPreset }) {
+                                Text(state.surroundPreset == nil ? "Reading…" : "Unknown preset").tag(state.surroundPreset)
+                            }
+                            ForEach(caps.surroundPresets) { Text($0.name).tag(Optional($0.id)) }
+                        }
+                        .labelsHidden().fixedSize()
+                        .disabled(!controller.canWrite || state.surroundAvailable != true || state.surroundPreset == nil)
+                    }
+                }
+                if !caps.soundPositions.isEmpty {
+                    if !caps.surroundPresets.isEmpty { RowDivider() }
+                    SettingRow(symbol: "dot.radiowaves.left.and.right", title: "Sound Position Control",
+                               detail: state.soundPositionAvailable == false ? "Unavailable with the current headphone settings." : nil) {
+                        Picker("Sound Position Control", selection: Binding<SoundPosition?>(
+                            get: { state.soundPosition },
+                            set: { if let position = $0 { controller.apply(.soundPosition(position)) } }
+                        )) {
+                            if state.soundPosition == nil { Text("Reading…").tag(nil as SoundPosition?) }
+                            ForEach(caps.soundPositions) { Text($0.title).tag(Optional($0)) }
+                        }
+                        .labelsHidden().fixedSize()
+                        .disabled(!controller.canWrite || state.soundPositionAvailable != true || state.soundPosition == nil)
+                    }
+                }
+            }
         }
     }
 }
@@ -106,63 +156,81 @@ struct EqualizerEditorCard: View {
     var body: some View {
         let state = controller.state
         if let cap = state.capabilities.equalizer {
+            let reported = state.equalizer != nil
             let eq = state.equalizer ?? EqualizerState(presetID: 0, bands: Array(repeating: 0, count: cap.bandCount), clearBass: cap.hasClearBass ? 0 : nil)
-            let current = EqualizerPreset(id: eq.presetID, name: EqualizerPreset.displayName(for: eq.presetID))
+            let completeCurve = reported && eq.bands.count == cap.bandCount && (!cap.hasClearBass || eq.clearBass != nil)
+            let current = cap.presets.first { $0.id == eq.presetID }
+                ?? EqualizerPreset(id: eq.presetID, name: EqualizerPreset.displayName(for: eq.presetID))
             let bands = draftBands ?? eq.bands
             let clearBass = draftClearBass ?? eq.clearBass ?? 0
             let manual = cap.presets.first { $0.id == 0xA0 } ?? cap.presets.first(where: \.isEditable)
+            let canEditBands = cap.supportsBandEditing && manual != nil
+            let available = controller.canWrite && state.equalizerAvailable == true
             // Current preset; for fixed presets, the one consequence worth stating: editing switches to Manual.
-            Card("Equalizer", subtitle: current.isEditable ? current.name : "\(current.name) · editing switches to \(manual?.name ?? "Manual")",
-                 trailing: AnyView(trailing(eq: eq, cap: cap, editable: current.isEditable))) {
+            Card("Equalizer", subtitle: !reported ? "Waiting for the current EQ setting…"
+                 : (current.isEditable || !canEditBands ? current.name : "\(current.name) · editing switches to \(manual?.name ?? "Manual")"),
+                 trailing: canEditBands && completeCurve ? AnyView(trailing(eq: eq, cap: cap, editable: current.isEditable)) : nil) {
                 FlowLayout(spacing: 8) {
                     ForEach(cap.presets) { preset in
-                        Chip(title: preset.name, selected: eq.presetID == preset.id,
+                        Chip(title: preset.name, selected: state.equalizer?.presetID == preset.id,
                              pending: controller.isPending(.equalizerPreset(preset.id))) {
                             draftBands = nil
                             draftClearBass = nil
                             controller.apply(.equalizerPreset(preset.id))
                         }
-                        .disabled(!controller.canWrite || busy)
+                        .disabled(!available || busy)
                     }
                 }
 
-                HStack(alignment: .bottom, spacing: 0) {
-                    if cap.hasClearBass {
-                        BandSlider(label: "Clear Bass", value: clearBass, range: cap.bandRange,
-                                   enabled: controller.canWrite && !busy, highlight: true,
-                                   onDrag: { draftClearBass = $0; draftBands = draftBands ?? eq.bands },
-                                   onCommit: { commit(bands: draftBands ?? eq.bands, clearBass: $0, current: current, manual: manual) })
-                            .frame(width: 76)
-                        Rectangle().fill(Theme.hairline).frame(width: 1).padding(.vertical, 22).padding(.horizontal, 10)
-                    }
-                    ZStack {
-                        // Thumb travel: value label 14 + spacing 8 + thumb radius 9 on top; label 13 + 8 + 9 below.
-                        EqualizerPreview(bands: bands, range: cap.bandRange, centered: true)
-                            .padding(.top, 31)
-                            .padding(.bottom, 30)
-                            .opacity(0.9)
-                            .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: bands)
-                        HStack(spacing: 0) {
-                            ForEach(Array(cap.bandLabels.enumerated()), id: \.offset) { index, label in
-                                BandSlider(label: label, value: index < bands.count ? bands[index] : 0, range: cap.bandRange,
-                                           enabled: controller.canWrite && !busy,
-                                           onDrag: { value in
-                                               var next = draftBands ?? eq.bands
-                                               if index < next.count { next[index] = value }
-                                               draftBands = next
-                                           },
-                                           onCommit: { value in
-                                               var next = draftBands ?? eq.bands
-                                               if index < next.count { next[index] = value }
-                                               commit(bands: next, clearBass: draftClearBass ?? eq.clearBass, current: current, manual: manual)
-                                           })
-                                    .frame(maxWidth: .infinity)
+                if let mode = state.equalizerULTMode {
+                    Text("ULT mode: \(mode == 0 ? "Off" : "ULT \(mode)"). EQ changes preserve this mode.")
+                        .font(.callout).foregroundStyle(Theme.secondary)
+                }
+                if !canEditBands {
+                    Text("Band editing is unavailable for this EQ configuration. Choose one of the advertised presets.")
+                        .font(.callout).foregroundStyle(Theme.secondary)
+                } else if !completeCurve {
+                    Text("Band values have not been reported. Choose a preset or wait for a complete EQ reply.")
+                        .font(.callout).foregroundStyle(Theme.secondary)
+                } else {
+                    HStack(alignment: .bottom, spacing: 0) {
+                        if cap.hasClearBass {
+                            BandSlider(label: "Clear Bass", value: clearBass, range: cap.bandRange,
+                                       enabled: available && !busy, highlight: true,
+                                       onDrag: { draftClearBass = $0; draftBands = draftBands ?? eq.bands },
+                                       onCommit: { commit(bands: draftBands ?? eq.bands, clearBass: $0, current: current, manual: manual) })
+                                .frame(width: 76)
+                            Rectangle().fill(Theme.hairline).frame(width: 1).padding(.vertical, 22).padding(.horizontal, 10)
+                        }
+                        ZStack {
+                            // Thumb travel: value label 14 + spacing 8 + thumb radius 9 on top; label 13 + 8 + 9 below.
+                            EqualizerPreview(bands: bands, range: cap.bandRange, centered: true)
+                                .padding(.top, 31)
+                                .padding(.bottom, 30)
+                                .opacity(0.9)
+                                .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: bands)
+                            HStack(spacing: 0) {
+                                ForEach(Array(cap.bandLabels.enumerated()), id: \.offset) { index, label in
+                                    BandSlider(label: label, value: index < bands.count ? bands[index] : 0, range: cap.bandRange,
+                                               enabled: available && !busy,
+                                               onDrag: { value in
+                                                   var next = draftBands ?? eq.bands
+                                                   if index < next.count { next[index] = value }
+                                                   draftBands = next
+                                               },
+                                               onCommit: { value in
+                                                   var next = draftBands ?? eq.bands
+                                                   if index < next.count { next[index] = value }
+                                                   commit(bands: next, clearBass: draftClearBass ?? eq.clearBass, current: current, manual: manual)
+                                               })
+                                        .frame(maxWidth: .infinity)
+                                }
                             }
                         }
                     }
+                    .frame(height: 230)
+                    .padding(.top, 4)
                 }
-                .frame(height: 230)
-                .padding(.top, 4)
 
                 if busy {
                     HStack {
@@ -186,7 +254,7 @@ struct EqualizerEditorCard: View {
         }
         .buttonStyle(.borderless)
         .foregroundStyle(Theme.accent)
-        .disabled(!controller.canWrite || busy || (eq.bands.allSatisfy { $0 == 0 } && (eq.clearBass ?? 0) == 0 && editable))
+        .disabled(!controller.canWrite || controller.state.equalizerAvailable != true || !cap.supportsBandEditing || busy || (eq.bands.allSatisfy { $0 == 0 } && (eq.clearBass ?? 0) == 0 && editable))
         .help("Set every band to 0 on the Manual preset")
     }
 
@@ -214,6 +282,13 @@ struct SavedCurvesCard: View {
     @State private var naming = false
     @State private var newName = ""
 
+    private var savableCurve: EqualizerState? {
+        guard !controller.isReplay, let cap = controller.state.capabilities.equalizer,
+              cap.supportsBandEditing, let curve = controller.state.equalizer else { return nil }
+        do { try EqualizerBank.validateCurve(curve, capability: cap); return curve }
+        catch { return nil }
+    }
+
     var body: some View {
         let state = controller.state
         let cap = state.capabilities.equalizer
@@ -224,8 +299,8 @@ struct SavedCurvesCard: View {
                     naming = true
                 } label: { Label("Save Current", systemImage: "plus").font(.label) }
                 .buttonStyle(.borderless)
-                .foregroundStyle(state.equalizer == nil || controller.isReplay ? Theme.tertiary : Theme.accent)
-                .disabled(state.equalizer == nil || controller.isReplay)
+                .foregroundStyle(savableCurve == nil ? Theme.tertiary : Theme.accent)
+                .disabled(savableCurve == nil)
                 .help(controller.isReplay ? "Not available in a read-only replay" : "Save the headphones' current curve on this Mac")
              )) {
             if library.curves.isEmpty {
@@ -245,7 +320,7 @@ struct SavedCurvesCard: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .disabled(!controller.canWrite)
+                        .disabled(!controller.canWrite || state.equalizerAvailable != true || !cap.supportsBandEditing)
                         .contextMenu {
                             Button("Delete “\(curve.name)”", role: .destructive) { library.remove(curve.id) }
                         }
@@ -257,7 +332,7 @@ struct SavedCurvesCard: View {
         .alert("Save Curve", isPresented: $naming) {
             TextField("Name", text: $newName)
             Button("Save") {
-                if let eq = state.equalizer {
+                if let eq = savableCurve {
                     library.add(SavedCurve(name: newName.trimmingCharacters(in: .whitespaces).ifEmpty("Curve"),
                                            bands: eq.bands, clearBass: eq.clearBass))
                 }
@@ -269,7 +344,7 @@ struct SavedCurvesCard: View {
     }
 
     private func apply(_ curve: SavedCurve, cap: EqualizerCapability) {
-        guard curve.bands.count == cap.bandCount, let manual = cap.presets.first(where: \.isEditable) else {
+        guard cap.supportsBandEditing, curve.bands.count == cap.bandCount, let manual = cap.presets.first(where: \.isEditable) else {
             controller.showToast(.warning, "That curve doesn't match these headphones' bands.")
             return
         }
@@ -305,7 +380,7 @@ struct SoundQualityCard: View {
                 if caps.connectionPriority {
                     if caps.upscalingName != nil { RowDivider() }
                     SettingRow(symbol: "antenna.radiowaves.left.and.right", title: "Bluetooth Connection Quality",
-                               detail: "Changing this reconnects the headphones.") {
+                               detail: "Changing this may reconnect the headphones.") {
                         Picker("Bluetooth Connection Quality", selection: Binding(
                             get: { state.connectionPriority ?? .soundQuality },
                             set: { if $0 != state.connectionPriority { confirmPriority = $0 } }
@@ -325,7 +400,7 @@ struct SoundQualityCard: View {
             Button(value.title) { controller.apply(.connectionPriority(value)) }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("The headphones will disconnect briefly and reconnect. OpenXM reconnects automatically.")
+            Text("The headphones may disconnect briefly. OpenXM will try to reconnect automatically.")
         }
     }
 

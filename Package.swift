@@ -12,6 +12,7 @@ let package = Package(
     ],
     targets: [
         .testTarget(name: "OpenXMTests", dependencies: ["OpenXM"],
+                    resources: [.copy("Fixtures")],
                     swiftSettings: [.swiftLanguageMode(.v5)]),
         .executableTarget(
             name: "OpenXM",

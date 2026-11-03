@@ -7,6 +7,8 @@ struct Capabilities: Equatable, Sendable {
     var noise: NoiseControlCapability?
     var equalizer: EqualizerCapability?
     var listeningMode: ListeningModeCapability?
+    var surroundPresets: [SurroundPreset] = []
+    var soundPositions: [SoundPosition] = []
     /// Display name of the upscaler ("DSEE Extreme", …) when the headset supports toggling it.
     var upscalingName: String?
     var upscalingIndicator = false
@@ -18,6 +20,7 @@ struct Capabilities: Equatable, Sendable {
     var autoPowerOffOptions: [AutoPowerOffOption] = []
     var autoPause = false
     var voiceGuidance = false
+    var voiceGuidanceCapability: VoiceGuidanceCapability?
     var voiceGuidanceVolume: ClosedRange<Int>?
     var generalSettingSlots: [UInt8] = []
     var assignableKeys: [AssignableKey] = []
@@ -31,18 +34,25 @@ struct Capabilities: Equatable, Sendable {
     var wearingStatus = false
     var headGesture = false
     var ncOptimizer = false
+    var ncOptimizerCapability: NoiseOptimizerCapability?
     var powerOff = false
     var alerts = false
 
     enum BatteryKind: Sendable { case single, leftRight, chargingCase }
 
-    var hasAnySoundFeature: Bool { equalizer != nil || upscalingName != nil || listeningMode != nil }
+    var hasAnySoundFeature: Bool {
+        equalizer != nil || upscalingName != nil || listeningMode != nil || !surroundPresets.isEmpty || !soundPositions.isEmpty
+    }
 }
 
 struct DeviceAlert: Identifiable, Equatable, Sendable {
     let id = UUID()
     let messageType: UInt8
     let requiresAnswer: Bool
+
+    var reconnectsWhenAccepted: Bool {
+        requiresAnswer && [0x01, 0x02, 0x06, 0x07].contains(messageType)
+    }
 
     var title: String {
         switch messageType {
@@ -72,6 +82,10 @@ struct DeviceAlert: Identifiable, Equatable, Sendable {
 @MainActor
 @Observable
 final class DeviceState {
+    /// Compound UI models can receive partial replies. Backups must distinguish actual setting values from
+    /// placeholders used to display activity indicators or extended options before their enable reply.
+    enum SettingReadback: Hashable { case upscalingEnabled, speakToChatEnabled, speakToChatOptions }
+    var settingReadbacks: Set<SettingReadback> = []
     var family: ProtocolFamily?
     var protocolVersion: Int?
     var modelName: String?
@@ -88,16 +102,30 @@ final class DeviceState {
     var battery = BatteryState()
     var codec: AudioCodec?
     var noise: NoiseControl?
+    /// V1 NC/ASM status. A missing or unknown reply must not enable a control.
+    var noiseAvailable: Bool?
+    var noiseControlAvailable: Bool {
+        capabilities.noise != nil && noise != nil && (family != .v1 || noiseAvailable == true)
+    }
     var equalizer: EqualizerState?
+    /// Complete explicit slot sweep only; ordinary EQ notifications invalidate this snapshot.
+    var equalizerBank: EqualizerBank?
     /// V2 reports the EQ as unavailable while e.g. Background Music is active.
     var equalizerAvailable: Bool?
+    /// V2 PRESET_EQ_AND_ULT_MODE carries this separately from the curve. Never infer Off.
+    var equalizerULTMode: UInt8?
     var listeningMode: ListeningMode?
+    var surroundPreset: UInt8?
+    var surroundAvailable: Bool?
+    var soundPosition: SoundPosition?
+    var soundPositionAvailable: Bool?
     var upscaling: UpscalingState?
     var connectionPriority: ConnectionPriority?
     var speakToChat: SpeakToChat?
     var autoPowerOff: UInt8?
     var autoPause: Bool?
     var voiceGuidance: Bool?
+    var voiceGuidanceDetails = VoiceGuidanceDetails()
     var voiceGuidanceVolume: Int?
     var generalSettings: [GeneralSetting] = []
     var assignablePresets: [UInt8]?
@@ -105,10 +133,20 @@ final class DeviceState {
     var pairedDevices: [PairedDevice]?
     var pairingMode: Bool?
     var nowPlaying = NowPlaying()
+
+    /// Avoid a write when nothing expired: history observes nowPlaying, so a no-op mutation would
+    /// invalidate that observation and continuously schedule another sample.
+    func expirePlaybackMetadata(at date: Date = Date()) {
+        var value = nowPlaying
+        value.expireMetadata(at: date)
+        if value != nowPlaying { nowPlaying = value }
+    }
     var soundPressure: Int?
     var wearing: WearingState?
     var headGesture: Bool?
-    var optimizer: OptimizerPhase = .idle
+    var optimizer: OptimizerPhase = .unknown(nil)
+    var optimizerAvailable: Bool?
+    var optimizerPersonalMeasured: Bool?
     var optimizerMeasuredPressure: Int?
     var alert: DeviceAlert?
 
@@ -117,13 +155,17 @@ final class DeviceState {
     var v1AsmSettingType: UInt8 = 0x01
 
     func reset() {
+        settingReadbacks = []
         family = nil; protocolVersion = nil; modelName = nil; firmware = nil; seriesCode = nil; colorCode = nil
         uniqueID = nil; supportFunctions = []; supportFunctionsTable2 = []; capabilities = Capabilities(); capabilitiesKnown = false
-        battery = BatteryState(); codec = nil; noise = nil; equalizer = nil; equalizerAvailable = nil
+        battery = BatteryState(); codec = nil; noise = nil; noiseAvailable = nil; equalizer = nil; equalizerBank = nil; equalizerAvailable = nil; equalizerULTMode = nil
         listeningMode = nil; upscaling = nil; connectionPriority = nil; speakToChat = nil; autoPowerOff = nil
+        surroundPreset = nil; surroundAvailable = nil; soundPosition = nil; soundPositionAvailable = nil
         autoPause = nil; voiceGuidance = nil; voiceGuidanceVolume = nil; generalSettings = []; assignablePresets = nil
+        voiceGuidanceDetails = VoiceGuidanceDetails()
         ncAmbButton = nil; pairedDevices = nil; pairingMode = nil; nowPlaying = NowPlaying(); soundPressure = nil
-        wearing = nil; headGesture = nil; optimizer = .idle; optimizerMeasuredPressure = nil; alert = nil
+        wearing = nil; headGesture = nil; optimizer = .unknown(nil); optimizerAvailable = nil
+        optimizerPersonalMeasured = nil; optimizerMeasuredPressure = nil; alert = nil
         v1NcSettingType = 0x02; v1AsmSettingType = 0x01
     }
 

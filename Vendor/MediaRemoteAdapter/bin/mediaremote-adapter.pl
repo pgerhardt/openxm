@@ -120,6 +120,7 @@ fail "Invalid function name: '$function_name'"
   unless $function_name eq "stream"
   || $function_name eq "get"
   || $function_name eq "send"
+  || $function_name eq "pause_disconnect" # OpenXM: guarded pause on terminal headphone loss only.
   || $function_name eq "seek"
   || $function_name eq "shuffle"
   || $function_name eq "repeat"

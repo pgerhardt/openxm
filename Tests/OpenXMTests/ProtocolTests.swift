@@ -51,15 +51,16 @@ struct FramingTests {
         let state = DeviceState()
         let driver = V1Driver(link: MDRLink(transport: nil), state: state)
         func receive(_ payload: [UInt8]) { driver.handle(MDRFrame(type: .dataMdr, sequence: 0, payload: payload)) }
-        // Layout agrees with SonyBridge and sony-device-center V1 getNoiseControl.
-        receive([0x67,0x02,0x11,0x01,0x00,0x01,0x01,12])
+        // Recorded XM3 capability, then synthetic mode changes using its advertised setting types.
+        receive([0x61, 0x02, 0x02, 0x00, 0x01, 0x02, 0x00, 20, 0x01, 20])
+        receive([0x67,0x02,0x11,0x02,0x00,0x01,0x01,12])
         #expect(state.noise?.mode == .ambient)
         #expect(state.noise?.ambientLevel == 12)
         #expect(state.noise?.focusOnVoice == true)
-        receive([0x67,0x02,0x11,0x01,0x02,0x01,0,0])
+        receive([0x67,0x02,0x11,0x02,0x02,0x01,0,0])
         #expect(state.noise?.mode == .noiseCancelling)
         #expect(state.noise?.ambientLevel == 12)
-        receive([0x67,0x02,0,0x01,0x02,0x01,0,0])
+        receive([0x67,0x02,0,0x02,0x02,0x01,0,0])
         #expect(state.noise?.mode == .off)
         #expect(state.noise?.ambientLevel == 12)
     }
@@ -68,11 +69,12 @@ struct FramingTests {
         let driver = V1Driver(link: MDRLink(transport: nil), state: state)
         driver.handle(MDRFrame(type:.dataMdr, sequence:0, payload:[0x11,0,84,0]))
         #expect(state.battery.headlineLevel == 84)
+        driver.handle(MDRFrame(type: .dataMdr, sequence: 0, payload: [0x51, 1, 6, 21, 1, 0xA0, 0]))
         driver.handle(MDRFrame(type:.dataMdr, sequence:0, payload:[0x57,1,0xa0,6,12,10,12,13,11,9]))
         #expect(state.equalizer?.clearBass == 2)
         #expect(state.equalizer?.bands == [0,2,3,1,-1])
         driver.handle(MDRFrame(type:.dataMdr, sequence:0, payload:[0x57,1,0xa0,6,12]))
-        #expect(state.equalizer?.bands == [0,2,3,1,-1])
+        #expect(state.equalizer == nil)
     }
     @Test func previewCannotWriteOrApplyScenes() async {
         let controller = HeadphoneController()

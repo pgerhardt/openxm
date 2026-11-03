@@ -10,6 +10,8 @@ final class SceneStore {
     private(set) var runningSceneID: UUID?
     private(set) var lastAutomaticRun: (sceneID: UUID, date: Date)?
     var saveError: String?
+    @ObservationIgnored lazy var appDataBackup = AppDataBackupWorkflow(controller: controller, scenes: self)
+    @ObservationIgnored lazy var location = SceneLocationService(allowsLocation: { [weak controller] in controller?.isReplay == false })
 
     private let fileURL: URL
     private let controller: HeadphoneController
@@ -17,6 +19,11 @@ final class SceneStore {
     private var firedToday: [UUID: String] = [:]
     private var activationObserver: NSObjectProtocol?
     private var lastAppTrigger: [UUID: Date] = [:]
+    private var automationStarted = false
+    private var asleep = false
+    private var sleepObservers: [NSObjectProtocol] = []
+    private var locationTracker = SceneLocationTracker()
+    private var locationRunScheduled = false
 
     /// `fileURL` overrides the storage location (the hardware probe uses a throw-away file so it never touches the
     /// user's scenes or the seeding flag).
@@ -62,6 +69,30 @@ final class SceneStore {
 
     var storageLocation: URL { fileURL }
 
+    func checkedBackupFile() throws -> Data? {
+        guard saveError == nil else { throw AppDataBackupError.invalid("Resolve the scene storage error before backing up or restoring scenes.") }
+        let data = try AppDataFileChange.read(fileURL)
+        let stored = try data.map { try JSONDecoder().decode([SoundScene].self, from: $0) } ?? []
+        guard stored == scenes else { throw AppDataBackupError.invalid("Saved scenes changed outside the app. Reopen OpenXM before continuing.") }
+        return data
+    }
+
+    func encodedRestoration(_ value: [SoundScene]) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(value)
+        guard data.count <= AppDataBackup.maximumBytes else { throw AppDataBackupError.invalid("The merged scene file exceeds 4 MB.") }
+        return data
+    }
+
+    /// Only called after the restore coordinator has successfully written every selected file.
+    func acceptRestoration(_ value: [SoundScene]) {
+        scenes = value
+        saveError = nil
+        rescheduleTriggers()
+    }
+    var hasLocationScenes: Bool { scenes.contains { if case .location = $0.trigger { return $0.triggerEnabled }; return false } }
+
     static let starterScenes: [SoundScene] = [
         SoundScene(name: "Deep Focus", symbol: "brain.head.profile", tint: .lavender,
                    noise: SceneNoise(mode: .noiseCancelling, ambientLevel: 20, focusOnVoice: false),
@@ -77,6 +108,7 @@ final class SceneStore {
     func scene(_ id: UUID) -> SoundScene? { scenes.first { $0.id == id } }
 
     func upsert(_ scene: SoundScene) {
+        guard scene.trigger.isValid else { saveError = "Choose a valid schedule, app or named place before saving this scene."; return }
         if let index = scenes.firstIndex(where: { $0.id == scene.id }) {
             scenes[index] = scene
         } else {
@@ -105,6 +137,7 @@ final class SceneStore {
     func move(from source: IndexSet, to destination: Int) {
         scenes.move(fromOffsets: source, toOffset: destination)
         save()
+        configureLocation()
     }
 
     // MARK: Running
@@ -131,6 +164,8 @@ final class SceneStore {
     @discardableResult
     func apply(_ id: UUID, automatic: Bool = false) async -> SceneResult? {
         guard let scene = scene(id), runningSceneID == nil else { return nil }
+        // A trigger may have been disabled or replaced while its task was queued.
+        guard !automatic || (scene.triggerEnabled && scene.trigger.isAutomatic) else { return nil }
         // Already in effect on the headphones: nothing to write (manual paths are disabled; automations no-op).
         guard !isApplied(scene) else { return nil }
         guard controller.canWrite else {
@@ -178,7 +213,15 @@ final class SceneStore {
     // MARK: Automation
 
     func startAutomation() {
-        guard !controller.isReplay else { return }
+        guard !controller.isReplay, !automationStarted else { return }
+        automationStarted = true
+        location.onFix = { [weak self] fix in
+            guard let self else { return }
+            self.locationTracker.receive(fix, now: Date())
+            self.applyLocationIfPossible()
+        }
+        location.onUnavailable = { [weak self] in self?.locationTracker.reset() }
+        location.onUncertain = { [weak self] in self?.locationTracker.invalidateDwell() }
         controller.onConnected = { [weak self] in
             self?.handleConnected()
         }
@@ -189,11 +232,25 @@ final class SceneStore {
             let bundleID = app?.bundleIdentifier
             MainActor.assumeIsolated { self?.handleActivation(bundleID: bundleID) }
         }
+        for event in [NSWorkspace.willSleepNotification, NSWorkspace.didWakeNotification] {
+            sleepObservers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: event, object: nil, queue: .main) { [weak self] note in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.asleep = note.name == NSWorkspace.willSleepNotification
+                    self.locationTracker.reset()
+                    if self.asleep { self.location.cancelCapture() }
+                    self.configureLocation()
+                }
+            })
+        }
+        observeConnectionForLocation()
         rescheduleTriggers()
     }
 
     private func rescheduleTriggers() {
         scheduleTimer?.invalidate()
+        configureLocation()
+        guard automationStarted, !controller.isReplay else { return }
         guard scenes.contains(where: { if case .schedule = $0.trigger { return $0.triggerEnabled }; return false }) else { return }
         scheduleTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.checkSchedules() }
@@ -201,6 +258,8 @@ final class SceneStore {
     }
 
     private func handleConnected() {
+        locationTracker.reset()
+        configureLocation()
         guard let scene = scenes.first(where: { $0.trigger == .onConnect && $0.triggerEnabled }) else { return }
         Task { await apply(scene.id, automatic: true) }
     }
@@ -233,6 +292,46 @@ final class SceneStore {
             } else {
                 controller.showToast(.info, "“\(scene.name)” was scheduled now, but the headphones aren't connected.")
             }
+        }
+    }
+
+    private func observeConnectionForLocation() {
+        withObservationTracking {
+            _ = controller.isConnected
+            _ = controller.isReplay
+            _ = controller.canWrite
+            _ = runningSceneID
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.configureLocation()
+                self.applyLocationIfPossible()
+                self.observeConnectionForLocation()
+            }
+        }
+    }
+
+    private func configureLocation() {
+        let places: [SceneLocationTracker.Entry] = scenes.compactMap {
+            guard $0.triggerEnabled, case .location(let trigger) = $0.trigger, trigger.isValid else { return nil }
+            return .init(id: $0.id, trigger: trigger)
+        }
+        locationTracker.configure(places)
+        location.setMonitoring(automationStarted && !asleep && !controller.isReplay && controller.isConnected && !places.isEmpty)
+    }
+
+    private func applyLocationIfPossible() {
+        guard automationStarted, !asleep, location.monitoring, !locationRunScheduled,
+              controller.canWrite, runningSceneID == nil, !locationTracker.candidates(at: Date()).isEmpty else { return }
+        locationRunScheduled = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.locationRunScheduled = false }
+            guard !self.asleep, self.location.monitoring, self.controller.canWrite, self.runningSceneID == nil else { return }
+            let candidates = self.locationTracker.candidates(at: Date())
+            guard let first = candidates.first else { return }
+            self.locationTracker.consume(candidates)
+            await self.apply(first, automatic: true)
         }
     }
 }

@@ -119,6 +119,7 @@ final class MDRLink: RFCOMMTransportDelegate {
     private let gate = AsyncSerialGate()
 
     init(transport: RFCOMMTransport?) {
+        precondition(transport == nil || transport?.family != nil, "GAIA is not an MDR control service")
         self.transport = transport
         transport?.delegate = self
         if transport == nil { isClosed = true }

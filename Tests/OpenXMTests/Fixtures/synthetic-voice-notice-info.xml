@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?><InformationFile LastUpdate="2026-10-30T00:00:00Z" Noop="false" Version="1.0">
+<ControlConditions DefaultServiceStatus="open" DefaultVariance="0"/>
+<ApplyConditions><ApplyCondition ApplyOrder="1" Force="false"><Rules>
+<Rule Type="System" Key="Model" Value="WH-1000XM3" Operator="Equal"/>
+<Rule Type="System" Key="FirmwareVersion" Value="2.0.0" Operator="GreaterThanEqual"/>
+<Rule Type="System" Key="SerialNo" Value="0" Operator="GreaterThanEqual"/>
+</Rules><Distributions><Distribution ID="FW" InstallParams="" InstallType="binary" MAC="0be67cf94f0ec505cf8d194aea0c6f9418a6ef76" Size="34" URI="https://info.update.sony.net/TEST_CATEGORY/TEST_EN_SERVICE/contents/0001/synthetic.bin" Version="1"/><Distribution ID="Disclaimer" InstallParams="" InstallType="notice" MAC="c56d46297d5daac0dfa16daefa6a6ee28df79daf" Size="143" URI="https://info.update.sony.net/TEST_CATEGORY/TEST_EN_SERVICE/contents/0001/synthetic-notice.xml" Version="1"/></Distributions></ApplyCondition></ApplyConditions></InformationFile>

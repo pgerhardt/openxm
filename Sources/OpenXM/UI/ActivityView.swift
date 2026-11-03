@@ -11,6 +11,8 @@ struct ActivityView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.cardSpacing) {
                 PageHeader(title: "Activity")
+                ListeningHistoryCard(history: controller.listeningHistory, readOnly: controller.isReplay)
+                ListeningContentCard(history: controller.listeningContentHistory, readOnly: controller.isReplay)
                 AdaptiveColumns {
                     VerificationCard()
                     CapabilityCard()
@@ -83,13 +85,15 @@ struct CapabilityCard: View {
                 ("Noise canceling & ambient", caps.noise != nil, caps.noise.map { "\($0.modes.count) modes, level \($0.ambientRange.lowerBound)–\($0.ambientRange.upperBound)" } ?? ""),
                 ("Equalizer", caps.equalizer != nil, caps.equalizer.map { "\($0.presets.count) presets, \($0.bandCount) bands\($0.hasClearBass ? " + Clear Bass" : "")" } ?? ""),
                 ("Listening mode", caps.listeningMode != nil, caps.listeningMode == nil ? "Not offered by this model" : ""),
+                ("Surround (VPT)", !caps.surroundPresets.isEmpty, caps.surroundPresets.map(\.name).joined(separator: ", ")),
+                ("Sound Position Control", !caps.soundPositions.isEmpty, ""),
                 (caps.upscalingName ?? "DSEE", caps.upscalingName != nil, ""),
                 ("Speak-to-Chat", caps.speakToChat, caps.speakToChatOptions ? "with sensitivity & timer" : ""),
                 ("Connection quality", caps.connectionPriority, ""),
                 ("Pause when taken off", caps.autoPause, ""),
                 ("Automatic power off", !caps.autoPowerOffOptions.isEmpty, caps.autoPowerOffOptions.map(\.title).joined(separator: ", ")),
                 ("Touch & general settings", !state.generalSettings.isEmpty, state.generalSettings.map(\.shortTitle).joined(separator: ", ")),
-                ("Button assignment", !caps.assignableKeys.isEmpty, ""),
+                ("Button assignment", !caps.assignableKeys.isEmpty || state.generalSettings.contains(where: { $0.isButtonAssignment && $0.isList }), ""),
                 ("Voice guidance", caps.voiceGuidance, ""),
                 ("Paired device list", caps.pairedDevices, caps.pairedDevices ? "" : "Not shared by this model"),
                 ("Playback & volume", caps.playback, ""),
@@ -228,6 +232,9 @@ struct ConnectionStateView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(Theme.pagePadding)
+        .sheet(isPresented: Binding(get: { controller.isPairing }, set: { if !$0 { controller.dismissPairing() } })) {
+            if let pairing = controller.pairing { HeadphonePairingView(pairing: pairing) }
+        }
     }
 
     private var spinnerRing: some View {
@@ -239,7 +246,8 @@ struct ConnectionStateView: View {
     }
 
     private var title: String {
-        switch controller.phase {
+        if controller.firmwareControlsReserved { return controller.guidancePackages.hasSession ? "Voice Language Update" : "Headphone Firmware" }
+        return switch controller.phase {
         case .starting: "Starting Bluetooth"
         case .permissionNeeded: "Allow Bluetooth"
         case .permissionDenied: "Bluetooth Access Is Off"
@@ -255,12 +263,15 @@ struct ConnectionStateView: View {
     }
 
     private var message: String {
-        switch controller.phase {
+        if controller.firmwareControlsReserved {
+            return "Normal controls are suspended while an update owns the connection. Open its status to check or resume the installation."
+        }
+        return switch controller.phase {
         case .starting: "One moment…"
         case .permissionNeeded: "OpenXM needs Bluetooth access to talk to your headphones. Choose Allow in the system prompt."
         case .permissionDenied: "Turn on Bluetooth for OpenXM in System Settings › Privacy & Security › Bluetooth."
         case .bluetoothOff: "Turn Bluetooth on to control your headphones."
-        case .noHeadphones: "Pair your headphones in System Settings › Bluetooth, then come back."
+        case .noHeadphones: "Put your headphones in pairing mode, then choose Pair Headphones."
         case .waiting: "Turn the headphones on, or connect them to this Mac. OpenXM connects automatically."
         case .connecting: "Connecting to your headphones…"
         case .initializing: "Reading settings from your headphones…"
@@ -272,17 +283,30 @@ struct ConnectionStateView: View {
 
     @ViewBuilder
     private var actions: some View {
-        switch controller.phase {
+        if controller.firmwareControlsReserved {
+            Button(controller.guidancePackages.hasSession ? "Language Update Status…" : "Firmware Status…") {
+                if controller.guidancePackages.hasSession { controller.guidancePackages.open() }
+                else { controller.firmwareUpdate.present() }
+            }
+                .buttonStyle(.borderedProminent).tint(Theme.accent)
+        } else { switch controller.phase {
         case .permissionDenied:
             Button("Open Privacy Settings") {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth")!)
             }
             .buttonStyle(.borderedProminent).tint(Theme.accent)
-        case .bluetoothOff, .noHeadphones:
+        case .bluetoothOff:
             Button("Open Bluetooth Settings") {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings")!)
             }
             .buttonStyle(.borderedProminent).tint(Theme.accent)
+        case .noHeadphones:
+            Button("Pair Headphones…") { controller.pairNewHeadphones() }
+                .buttonStyle(.borderedProminent).tint(Theme.accent)
+                .disabled(controller.isPairing || controller.isReplay)
+            Button("Open Bluetooth Settings") {
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings")!)
+            }.buttonStyle(.borderless)
         case .waiting, .failed:
             if let address = controller.selectedAddress, !controller.isReplay {
                 Button {
@@ -298,8 +322,11 @@ struct ConnectionStateView: View {
                 .keyboardShortcut("k", modifiers: [.command])
                 .help("Connects the headphones to this Mac if needed")
             }
+            Button("Pair New Headphones…") { controller.pairNewHeadphones() }
+                .disabled(controller.isPairing || controller.isReplay)
         default:
             EmptyView()
+        }
         }
     }
 }

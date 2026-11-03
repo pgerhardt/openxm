@@ -116,6 +116,7 @@ final class ProbeRunner {
             say("  Equalizer: \(eq.bandCount) bands \(eq.bandRange), clear bass \(eq.hasClearBass), presets \(eq.presets.map { String(format: "%02X:%@", $0.id, $0.name) })")
         }
         if let listening = c.listeningMode { say("  Listening mode: BGM \(listening.backgroundMusic), cinema \(listening.cinema)") }
+        say("  Surround presets: \(c.surroundPresets.map(\.name))  Sound positions: \(c.soundPositions.map(\.title))")
         say("  Upscaling: \(c.upscalingName ?? "no")  indicator \(c.upscalingIndicator)  codec indicator \(c.codecIndicator)")
         say("  Connection priority: \(c.connectionPriority)  Speak-to-Chat: \(c.speakToChat) options \(c.speakToChatOptions)")
         say("  Auto power off options: \(c.autoPowerOffOptions.map(\.title))")
@@ -134,14 +135,18 @@ final class ProbeRunner {
         say("  Noise: \(s.noise.map { "\($0.mode.title) level \($0.ambientLevel) voice \($0.focusOnVoice) last \($0.lastActiveMode.title)" } ?? "-")")
         say("  Equalizer: \(s.equalizer.map { "\(EqualizerPreset.displayName(for: $0.presetID)) bands \($0.bands) clearBass \(String(describing: $0.clearBass))" } ?? "-") available \(String(describing: s.equalizerAvailable))")
         say("  Connection priority: \(s.connectionPriority?.title ?? "-")")
+        say("  Surround: \(s.surroundPreset.map { SurroundPreset.displayName(for: $0) } ?? "-") available \(String(describing: s.surroundAvailable))")
+        say("  Sound position: \(s.soundPosition?.title ?? "-") available \(String(describing: s.soundPositionAvailable))")
         say("  Speak-to-Chat: \(s.speakToChat.map { "enabled=\($0.enabled) sensitivity=\($0.sensitivity?.title ?? "-") timeout=\($0.timeout?.title ?? "-") voiceFocus=\(String(describing: $0.voiceFocus))" } ?? "-")")
         say("  Auto power off: \(s.autoPowerOff.map { AutoPowerOffOption(id: $0).title } ?? "-")  Pause when taken off: \(s.autoPause.map(String.init) ?? "-")")
         say("  Voice guidance: \(s.voiceGuidance.map(String.init) ?? "-")  Pairing mode: \(s.pairingMode.map(String.init) ?? "-")")
-        for setting in s.generalSettings { say("  \(setting.title): \(setting.value.map(String.init) ?? "-")") }
+        for setting in s.generalSettings {
+            say("  \(setting.title): \(setting.isList ? (setting.selectedOption?.title ?? "-") : (setting.value.map(String.init) ?? "-"))")
+        }
         say("  Button assignment: \(s.assignablePresets?.hex ?? "-")")
         say("  Paired devices: \(s.pairedDevices?.map { "\($0.name)\($0.connected ? " (connected)" : "")\($0.isPlaybackSource ? " [playback]" : "")" } ?? [])")
         say("  Now playing: \(s.nowPlaying.title ?? "-") — \(s.nowPlaying.artist ?? "-")  status \(String(describing: s.nowPlaying.status)) volume \(s.nowPlaying.volume.map(String.init) ?? "-")")
-        say("  NC optimizer: \(s.optimizer) pressure \(String(describing: s.optimizerMeasuredPressure))")
+        say("  NC optimizer: \(s.optimizer) available \(String(describing: s.optimizerAvailable)) personal \(String(describing: s.optimizerPersonalMeasured)) pressure \(String(describing: s.optimizerMeasuredPressure))")
     }
 
     // MARK: Exercises

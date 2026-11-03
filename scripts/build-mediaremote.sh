@@ -9,9 +9,10 @@ rm -rf "$FRAMEWORK"
 mkdir -p "$FRAMEWORK/Versions/A/Resources"
 xcrun clang -isysroot "$SDKROOT" -mmacosx-version-min=15.0 \
   -dynamiclib -fobjc-arc -fvisibility=default -O2 \
-  -I"$SOURCE/include" -I"$SOURCE/src" \
+  -I"$SOURCE/include" -I"$SOURCE/src" -I"$ROOT/Vendor/BlueBloom/Driver" \
   "$SOURCE"/src/adapter/*.m "$SOURCE"/src/private/*.m "$SOURCE"/src/utility/*.m \
-  -framework Foundation -framework AppKit -framework UniformTypeIdentifiers \
+  "$ROOT"/Helpers/MediaPause/*.m \
+  -framework Foundation -framework AppKit -framework UniformTypeIdentifiers -framework CoreAudio \
   -install_name '@rpath/MediaRemoteAdapter.framework/Versions/A/MediaRemoteAdapter' \
   -o "$FRAMEWORK/Versions/A/MediaRemoteAdapter"
 cat > "$FRAMEWORK/Versions/A/Resources/Info.plist" <<'PLIST'

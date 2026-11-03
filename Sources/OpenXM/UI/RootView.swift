@@ -46,6 +46,7 @@ final class Navigation {
 
 struct RootView: View {
     @Environment(HeadphoneController.self) private var controller
+    @Environment(SceneStore.self) private var scenes
     @Environment(Navigation.self) private var navigation
 
     var body: some View {
@@ -57,6 +58,16 @@ struct RootView: View {
             VStack(spacing: 0) {
                 if controller.isReplay {
                     ReplayNotice()
+                }
+                if controller.equalizerGuide.reserved && !controller.equalizerGuide.isPresented {
+                    HStack {
+                        Label("Restore your EQ comparison before changing other headphone settings.", systemImage: "arrow.uturn.backward.circle")
+                            .font(.callout)
+                        Spacer()
+                        Button("Review EQ Recovery…") { controller.equalizerGuide.open() }
+                    }
+                    .padding(12)
+                    .background(Theme.warning.opacity(0.12))
                 }
                 // The canvas is a background, not a ZStack sibling: an ignoresSafeArea sibling would enlarge the
                 // stack and shift centered content up under the title bar / replay banner.
@@ -72,8 +83,24 @@ struct RootView: View {
         .overlay(alignment: .bottomTrailing) { OfferStack() }
         .preferredColorScheme(.dark)
         .tint(Theme.accent)
+        .sheet(isPresented: Binding(get: { controller.equalizerGuide.isPresented }, set: { controller.equalizerGuide.isPresented = $0 })) {
+            EqualizerGuideView()
+        }
+        .sheet(isPresented: Binding(get: { controller.settingsBackup.isPresented }, set: { controller.settingsBackup.isPresented = $0 }),
+               onDismiss: { controller.settingsBackup.completeLanguageRestoreHandoff() }) {
+            SettingsBackupView()
+        }
+        .sheet(isPresented: Binding(get: { controller.firmwareUpdate.isPresented }, set: { controller.firmwareUpdate.isPresented = $0 })) {
+            FirmwareUpdateView()
+        }
+        .sheet(isPresented: Binding(get: { controller.guidancePackages.isPresented }, set: { controller.guidancePackages.isPresented = $0 })) {
+            GuidancePackageView()
+        }
+        .sheet(isPresented: Binding(get: { scenes.appDataBackup.isPresented }, set: { scenes.appDataBackup.isPresented = $0 })) {
+            AppDataBackupView()
+        }
         .alert(controller.state.alert?.title ?? "",
-               isPresented: Binding(get: { controller.state.alert != nil }, set: { if !$0 { controller.answerAlert(accept: false) } }),
+               isPresented: Binding(get: { controller.state.alert != nil && !controller.settingsBackup.isPresented }, set: { if !$0 && !controller.settingsBackup.isPresented { controller.answerAlert(accept: false) } }),
                presenting: controller.state.alert) { alert in
             if alert.requiresAnswer {
                 Button("Continue") { controller.answerAlert(accept: true) }
@@ -88,7 +115,9 @@ struct RootView: View {
 
     @ViewBuilder
     private func content(for page: AppPage) -> some View {
-        if page.needsConnection && !controller.isConnected {
+        if page == .myDevice && !controller.isConnected && (controller.codecTransport.isEngaged || controller.codecTransport.message != nil) {
+            ScrollView { AudioConnectionCard().padding(Theme.pagePadding) }
+        } else if page.needsConnection && !controller.isConnected {
             ConnectionStateView()
         } else {
             switch page {
@@ -357,7 +386,7 @@ struct ReplayNotice: View {
                 Text(controller.isDemo ? "PREVIEW · SAMPLE DATA" : "READ-ONLY REPLAY — NOT LIVE")
                     .font(.system(size: compact ? 10.5 : 11.5, weight: .bold)).tracking(0.6)
                 if !compact {
-                    Text(controller.isDemo ? "Explore the interface with sample data. Headphone controls are disabled. Quit and reopen to connect your headphones." : "Showing frames recorded from real headphones (\(controller.replaySource ?? "file")\(controller.lastRefresh.map { ", " + $0.formatted(date: .abbreviated, time: .shortened) } ?? "")). Changes, scenes and automations are disabled; nothing is sent over Bluetooth.")
+                    Text(controller.isDemo ? "Explore the interface with sample data. Headphone controls are disabled. Quit and reopen to connect your headphones." : "Showing saved protocol frames (\(controller.replaySource ?? "file")\(controller.lastRefresh.map { ", " + $0.formatted(date: .abbreviated, time: .shortened) } ?? "")). Changes, scenes and automations are disabled; nothing is sent over Bluetooth.")
                         .font(.system(size: 11))
                         .lineLimit(2)
                 }

@@ -156,6 +156,10 @@ struct EqualizerCapability: Equatable, Sendable {
     var bandCount: Int
     var bandRange: ClosedRange<Int>
     var hasClearBass: Bool
+    /// All-slot capture/restore is enabled only for a protocol layout whose curve writes are understood.
+    var supportsCustomBank: Bool = true
+    /// Fixed-preset configurations do not accept band changes.
+    var supportsBandEditing: Bool = true
 
     var bandLabels: [String] {
         bandCount == 10
@@ -297,20 +301,43 @@ struct UpscalingState: Equatable, Sendable {
 
 // MARK: - General settings, buttons, devices
 
+/// V1 list values are positions in the device's list, not ButtonFunction wire IDs.
+struct GeneralSettingOption: Identifiable, Equatable, Sendable {
+    let index: UInt8
+    let key: String
+    let summaryKey: String
+    var id: UInt8 { index }
+
+    var title: String {
+        switch key {
+        case "ASSIGNABLE_KEY_ELEM_NCASM": "Ambient Sound Control"
+        case "ASSIGNABLE_KEY_ELEM_GOOGLE_ASSISTANT": "Google Assistant"
+        case "ASSIGNABLE_KEY_ELEM_AMAZON_ALEXA": "Amazon Alexa"
+        case "ASSIGNABLE_KEY_ELEM_TENCENT_XIAOWEI": "Tencent Xiaowei"
+        default: key.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
+        }
+    }
+}
+
 struct GeneralSetting: Identifiable, Equatable, Sendable {
     let slot: UInt8
     var key: String
     var summaryKey: String
     var isBoolean: Bool
     var value: Bool?
+    var options: [GeneralSettingOption] = []
+    var selectedIndex: UInt8?
     var id: UInt8 { slot }
+    var isList: Bool { !isBoolean && !options.isEmpty }
+    var isButtonAssignment: Bool { key == "ASSIGNABLE_KEY_SETTING" }
+    var selectedOption: GeneralSettingOption? { options.first { $0.index == selectedIndex } }
 
     var title: String {
         switch key {
         case "TOUCH_PANEL_SETTING": "Touch Sensor Control Panel"
         case "MULTIPOINT_SETTING": "Connect to 2 Devices Simultaneously"
         case "SIDETONE_SETTING": "Capture Voice During a Phone Call"
-        case "ASSIGNABLE_KEY_SETTING": "Custom Button"
+        case "ASSIGNABLE_KEY_SETTING": "NC/AMBIENT Button"
         default:
             key.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
         }
@@ -419,21 +446,43 @@ enum PlaybackStatus: UInt8, Sendable {
 }
 
 struct NowPlaying: Equatable, Sendable {
-    var title: String?
-    var artist: String?
-    var album: String?
-    var status: PlaybackStatus?
+    private(set) var metadata: PlaybackMetadata?
+    private(set) var metadataReportedAt: Date?
+    var title: String? { metadata?.title }
+    var artist: String? { metadata?.artist }
+    var album: String? { metadata?.album }
+    private(set) var status: PlaybackStatus?
+    private(set) var statusReportedAt: Date?
+    private var musicPlayback = false
     var volume: Int?
+
+    mutating func receiveMetadata(_ value: PlaybackMetadata?, at date: Date = Date()) {
+        metadata = value
+        metadataReportedAt = value == nil ? nil : date
+    }
+
+    mutating func expireMetadata(at date: Date = Date()) {
+        guard let metadataReportedAt else { return }
+        let age = date.timeIntervalSince(metadataReportedAt)
+        if age < 0 || age >= 90 { receiveMetadata(nil) }
+    }
+
+    mutating func receivePlaybackStatus(_ value: PlaybackStatus?, music: Bool = true, at date: Date = Date()) {
+        status = value
+        statusReportedAt = value == nil ? nil : date
+        musicPlayback = music
+    }
+
+    /// Only a headset playback reply can refresh this estimate. Battery/metadata refreshes cannot.
+    func hasFreshListeningStatus(at date: Date) -> Bool {
+        guard let status, status != .unsettled, let statusReportedAt, musicPlayback else { return false }
+        let age = date.timeIntervalSince(statusReportedAt)
+        return age >= 0 && age < 90
+    }
 }
 
 enum PlaybackCommand: UInt8, Sendable {
     case pause = 0x01, next = 0x02, previous = 0x03, play = 0x07
-}
-
-enum OptimizerPhase: Equatable, Sendable {
-    case idle
-    case running
-    case finished
 }
 
 enum WearingState: Sendable {

@@ -14,6 +14,7 @@ struct MyDeviceView: View {
 
                 TwoColumnLayout(spacing: Theme.cardSpacing) {
                     VStack(spacing: Theme.cardSpacing) {
+                        AudioConnectionCard()
                         if caps.noise != nil { NoiseControlCard() }
                         if caps.listeningMode != nil { ListeningModeCard() }
                         QuickSettingsCard(page: $page)
@@ -39,36 +40,41 @@ struct AdaptiveColumns<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            TwoColumnLayout(spacing: Theme.cardSpacing) { content }
-                .frame(minWidth: 760)
-            VStack(spacing: Theme.cardSpacing) { content }
-        }
+        // Keep one child hierarchy. ViewThatFits repeatedly measured both copies of observed cards,
+        // causing continuous layout on Activity when their intrinsic widths disagreed.
+        TwoColumnLayout(spacing: Theme.cardSpacing, minimumTwoColumnWidth: 760) { content }
     }
 }
 
 /// Masonry-style two-column layout: each subview goes to the currently shorter column, in order.
 struct TwoColumnLayout: Layout {
     var spacing: CGFloat
+    var minimumTwoColumnWidth: CGFloat?
+
+    private func columnCount(width: CGFloat) -> Int {
+        if let minimumTwoColumnWidth, width < minimumTwoColumnWidth { 1 } else { 2 }
+    }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? 800
-        let column = (width - spacing) / 2
-        var heights: [CGFloat] = [0, 0]
+        let count = columnCount(width: width)
+        let column = max(0, (width - spacing * CGFloat(count - 1)) / CGFloat(count))
+        var heights = Array(repeating: CGFloat.zero, count: count)
         for subview in subviews {
             let size = subview.sizeThatFits(ProposedViewSize(width: column, height: nil))
-            let index = heights[0] <= heights[1] ? 0 : 1
+            let index = count == 1 || heights[0] <= heights[1] ? 0 : 1
             heights[index] += (heights[index] > 0 ? spacing : 0) + size.height
         }
         return CGSize(width: width, height: heights.max() ?? 0)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let column = (bounds.width - spacing) / 2
-        var heights: [CGFloat] = [0, 0]
+        let count = columnCount(width: bounds.width)
+        let column = max(0, (bounds.width - spacing * CGFloat(count - 1)) / CGFloat(count))
+        var heights = Array(repeating: CGFloat.zero, count: count)
         for subview in subviews {
             let size = subview.sizeThatFits(ProposedViewSize(width: column, height: nil))
-            let index = heights[0] <= heights[1] ? 0 : 1
+            let index = count == 1 || heights[0] <= heights[1] ? 0 : 1
             let x = bounds.minX + CGFloat(index) * (column + spacing)
             let y = bounds.minY + heights[index] + (heights[index] > 0 ? spacing : 0)
             subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(width: column, height: size.height))
@@ -100,7 +106,7 @@ struct NoiseControlCard: View {
                             ModeButton(title: mode.title, symbol: mode.symbol,
                                        selected: current?.mode == mode,
                                        pending: intent?.mode == mode && current?.mode != mode,
-                                       enabled: controller.canWrite) {
+                                       enabled: controller.canAdjustNoise) {
                                 select(mode)
                             }
                             .frame(maxWidth: .infinity)
@@ -121,7 +127,7 @@ struct NoiseControlCard: View {
                                 .contentTransition(reduceMotion ? .identity : .numericText())
                         }
                         LevelSlider(value: shown.ambientLevel, range: cap.ambientRange,
-                                    enabled: controller.canWrite, accessibilityName: "Ambient sound level",
+                                    enabled: controller.canAdjustNoise, accessibilityName: "Ambient sound level",
                                     onDrag: { controller.dragAmbientLevel($0) },
                                     onCommit: { level in
                                         if !controller.isReplay { rememberedLevel = level }
@@ -136,7 +142,7 @@ struct NoiseControlCard: View {
                                 Text("Focus on Voice").font(.system(size: 13.5, weight: .medium)).foregroundStyle(Theme.text)
                             }
                             .toggleStyle(AccentToggleStyle())
-                            .disabled(!controller.canWrite)
+                            .disabled(!controller.canAdjustNoise)
                             .accessibilityLabel("Focus on Voice")
                         }
                     }
@@ -153,6 +159,10 @@ struct NoiseControlCard: View {
     }
 
     private func subtitle(_ current: NoiseControl?) -> String {
+        if controller.state.family == .v1 {
+            if controller.state.noiseAvailable == false { return "Unavailable with the current headphone settings." }
+            if controller.state.noiseAvailable == nil { return "Waiting for control availability…" }
+        }
         guard let current else { return "Waiting for the headphones…" }
         switch current.mode {
         case .ambient: return "Ambient Sound · level \(current.ambientLevel)\(current.focusOnVoice ? " · Focus on Voice" : "")"
@@ -238,7 +248,7 @@ struct EqualizerSummaryCard: View {
                                  pending: controller.isPending(.equalizerPreset(preset.id))) {
                                 controller.apply(.equalizerPreset(preset.id))
                             }
-                            .disabled(!controller.canWrite)
+                            .disabled(!controller.canWrite || state.equalizerAvailable != true)
                         }
                     }
                     .padding(.vertical, 2)
@@ -363,14 +373,24 @@ struct NowPlayingCard: View {
                 }
                 .disabled(controller.isReplay || (track == nil ? !controller.canWrite : system.commandPending))
             }
-            if let volume = playing.volume {
+            TrackProgressView(track: track)
+            let transport = controller.codecTransport
+            let customVolume = transport.isEngaged
+            if let volume = customVolume ? transport.volumePercent : playing.volume {
+                Rectangle().fill(Theme.hairline).frame(height: 1)
                 HStack(spacing: 10) {
-                    Image(systemName: "speaker.fill").font(.system(size: 10)).foregroundStyle(Theme.secondary)
-                    LevelSlider(value: volume, range: 0...30, enabled: controller.canWrite, accessibilityName: "Headphone volume",
-                                onDrag: { _ in }, onCommit: { controller.apply(.volume($0)) })
-                    Image(systemName: "speaker.wave.3.fill").font(.system(size: 10)).foregroundStyle(Theme.secondary)
-                    Text("\(volume)").font(.system(size: 11, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(Theme.secondary).frame(width: 20, alignment: .trailing)
+                    Label("Volume", systemImage: "speaker.wave.2.fill")
+                        .font(.caption11).foregroundStyle(Theme.secondary)
+                        .fixedSize()
+                    LevelSlider(value: volume, range: customVolume ? 0...100 : 0...30,
+                                enabled: customVolume ? transport.canSetVolume : controller.canWrite,
+                                accessibilityName: customVolume ? "Headphone volume percent" : "Headphone volume",
+                                onDrag: { _ in }, onCommit: {
+                                    if customVolume { transport.setVolumePercent($0) }
+                                    else { controller.apply(.volume($0)) }
+                                })
+                    Text(customVolume ? "\(volume)%" : "\(volume)").font(.system(size: 11, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(Theme.secondary).frame(width: customVolume ? 34 : 20, alignment: .trailing)
                 }
             }
         }
@@ -386,6 +406,37 @@ struct NowPlayingCard: View {
             }
         } else {
             controller.apply(.playback(command))
+        }
+    }
+}
+
+private struct TrackProgressView: View {
+    let track: SystemNowPlaying.Item?
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1, paused: track?.playing != true)) { context in
+            let progress = track?.progress(at: context.date)
+            VStack(spacing: 8) {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Theme.control)
+                        Capsule().fill(Theme.accent)
+                            .frame(width: geometry.size.width * (progress?.fraction ?? 0))
+                    }
+                }
+                .frame(height: 4)
+                HStack {
+                    Text(progress?.elapsedText ?? "—:—")
+                    Spacer(minLength: 8)
+                    Text(progress?.durationText ?? "—:—")
+                }
+                .font(.caption11.monospacedDigit())
+                .foregroundStyle(Theme.secondary)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Track progress")
+            .accessibilityValue(progress.map { "\($0.elapsedText) of \($0.durationText)" }
+                ?? "Unavailable")
         }
     }
 }

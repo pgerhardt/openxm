@@ -1,0 +1,198 @@
+{
+  "model": "WH-1000XM3",
+  "firmware": "2.0.0",
+  "build": "202610301203",
+  "capturedOn": "2026-10-30",
+  "provenance": "Physical international headset. Each unchanged SET payload is paired with a subsequent matching RET before another SET for that setting. Extracted from local native protocol exports xm3-core-matrix-{eq,effects,power-connection}.txt. Device identifiers, media, battery, calibration and personal custom EQ curves are excluded. This establishes reported settings, not audible behavior or power-cycle persistence.",
+  "cases": [
+    {
+      "feature": "surround",
+      "label": "Off",
+      "value": 0,
+      "write": "48 01 00",
+      "reply": "47 01 00"
+    },
+    {
+      "feature": "surround",
+      "label": "Outdoor Festival",
+      "value": 1,
+      "write": "48 01 01",
+      "reply": "47 01 01"
+    },
+    {
+      "feature": "surround",
+      "label": "Arena",
+      "value": 2,
+      "write": "48 01 02",
+      "reply": "47 01 02"
+    },
+    {
+      "feature": "surround",
+      "label": "Concert Hall",
+      "value": 3,
+      "write": "48 01 03",
+      "reply": "47 01 03"
+    },
+    {
+      "feature": "surround",
+      "label": "Club",
+      "value": 4,
+      "write": "48 01 04",
+      "reply": "47 01 04"
+    },
+    {
+      "feature": "soundPosition",
+      "label": "Off",
+      "value": 0,
+      "write": "48 02 00",
+      "reply": "47 02 00"
+    },
+    {
+      "feature": "soundPosition",
+      "label": "Front Left",
+      "value": 1,
+      "write": "48 02 01",
+      "reply": "47 02 01"
+    },
+    {
+      "feature": "soundPosition",
+      "label": "Front Right",
+      "value": 2,
+      "write": "48 02 02",
+      "reply": "47 02 02"
+    },
+    {
+      "feature": "soundPosition",
+      "label": "Front",
+      "value": 3,
+      "write": "48 02 03",
+      "reply": "47 02 03"
+    },
+    {
+      "feature": "soundPosition",
+      "label": "Rear Left",
+      "value": 17,
+      "write": "48 02 11",
+      "reply": "47 02 11"
+    },
+    {
+      "feature": "soundPosition",
+      "label": "Rear Right",
+      "value": 18,
+      "write": "48 02 12",
+      "reply": "47 02 12"
+    },
+    {
+      "feature": "equalizer",
+      "label": "Off",
+      "value": 0,
+      "write": "58 01 00 00",
+      "reply": "57 01 00 06 0A 0A 0A 0A 0A 0A"
+    },
+    {
+      "feature": "equalizer",
+      "label": "Bright",
+      "value": 16,
+      "write": "58 01 10 00",
+      "reply": "57 01 10 06 09 0A 0F 11 11 13"
+    },
+    {
+      "feature": "equalizer",
+      "label": "Excited",
+      "value": 17,
+      "write": "58 01 11 00",
+      "reply": "57 01 11 06 12 09 0B 0A 0D 0F"
+    },
+    {
+      "feature": "equalizer",
+      "label": "Mellow",
+      "value": 18,
+      "write": "58 01 12 00",
+      "reply": "57 01 12 06 07 09 08 07 06 04"
+    },
+    {
+      "feature": "equalizer",
+      "label": "Relaxed",
+      "value": 19,
+      "write": "58 01 13 00",
+      "reply": "57 01 13 06 01 07 09 07 05 02"
+    },
+    {
+      "feature": "equalizer",
+      "label": "Vocal",
+      "value": 20,
+      "write": "58 01 14 00",
+      "reply": "57 01 14 06 0A 10 0E 0C 0D 09"
+    },
+    {
+      "feature": "equalizer",
+      "label": "Treble Boost",
+      "value": 21,
+      "write": "58 01 15 00",
+      "reply": "57 01 15 06 0A 0A 0A 0C 10 14"
+    },
+    {
+      "feature": "equalizer",
+      "label": "Bass Boost",
+      "value": 22,
+      "write": "58 01 16 00",
+      "reply": "57 01 16 06 11 0A 0A 0A 0A 0A"
+    },
+    {
+      "feature": "equalizer",
+      "label": "Speech",
+      "value": 23,
+      "write": "58 01 17 00",
+      "reply": "57 01 17 06 00 0E 0D 0B 0C 00"
+    },
+    {
+      "feature": "autoPowerOff",
+      "label": "After 5 minutes",
+      "value": 0,
+      "write": "F8 04 01 00 00",
+      "reply": "F7 04 01 00 00"
+    },
+    {
+      "feature": "autoPowerOff",
+      "label": "After 30 minutes",
+      "value": 1,
+      "write": "F8 04 01 01 01",
+      "reply": "F7 04 01 01 01"
+    },
+    {
+      "feature": "autoPowerOff",
+      "label": "After 1 hour",
+      "value": 2,
+      "write": "F8 04 01 02 02",
+      "reply": "F7 04 01 02 02"
+    },
+    {
+      "feature": "autoPowerOff",
+      "label": "After 3 hours",
+      "value": 3,
+      "write": "F8 04 01 03 03",
+      "reply": "F7 04 01 03 03"
+    },
+    {
+      "feature": "autoPowerOff",
+      "label": "Don't turn off",
+      "value": 17,
+      "write": "F8 04 01 11 11",
+      "reply": "F7 04 01 11 01"
+    },
+    {
+      "feature": "connectionPriority",
+      "label": "Prioritize Sound Quality",
+      "value": 0,
+      "write": "E8 01 00 00",
+      "reply": "E7 01 00 00"
+    },
+    {
+      "feature": "connectionPriority",
+      "label": "Prioritize Stable Connection",
+      "value": 1,
+      "write": "E8 01 00 01",
+      "reply": "E7 01 00 01"
+    }
+  ]
+}

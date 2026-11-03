@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>io.github.pgerhardt.OpenXM.CodecTransport</string>
+<key>CFBundleName</key><string>OpenXM Codec Transport</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>NSBluetoothAlwaysUsageDescription</key><string>OpenXM streams audio to your headphones using the Bluetooth codec you select.</string>
+<key>NSAudioCaptureUsageDescription</key><string>OpenXM streams audio routed to its virtual output to your headphones.</string>
+</dict></plist>

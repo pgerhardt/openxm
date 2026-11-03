@@ -5,16 +5,20 @@ enum DeviceChange: Equatable, Sendable {
     case noise(NoiseControl, dragging: Bool)
     case equalizerPreset(UInt8)
     case equalizerBands(bands: [Int], clearBass: Int?)
+    case equalizerBank(EqualizerBank)
     case listeningMode(ListeningMode)
+    case surroundPreset(UInt8)
+    case soundPosition(SoundPosition)
     case upscaling(Bool)
     case connectionPriority(ConnectionPriority)
     case speakToChat(Bool)
-    case speakToChatOptions(ChatSensitivity, ChatTimeout)
+    case speakToChatOptions(ChatSensitivity, ChatTimeout, voiceFocus: Bool? = nil)
     case autoPowerOff(UInt8)
     case autoPause(Bool)
     case voiceGuidance(Bool)
     case voiceGuidanceVolume(Int)
     case generalSetting(slot: UInt8, value: Bool)
+    case generalSettingChoice(slot: UInt8, index: UInt8)
     case assignable([UInt8])
     case ncAmbButton(NcAmbButtonCycle)
     case headGesture(Bool)
@@ -27,7 +31,10 @@ enum DeviceChange: Equatable, Sendable {
         case .noise(let value, _): value.mode.title
         case .equalizerPreset(let id): "Equalizer: \(EqualizerPreset.displayName(for: id))"
         case .equalizerBands: "Equalizer bands"
+        case .equalizerBank: "All custom EQ curves"
         case .listeningMode(let mode): "Listening mode: \(mode.title)"
+        case .surroundPreset(let id): "Surround: \(SurroundPreset.displayName(for: id))"
+        case .soundPosition(let position): "Sound position: \(position.title)"
         case .upscaling(let on): "DSEE \(on ? "on" : "off")"
         case .connectionPriority(let value): value.title
         case .speakToChat(let on): "Speak-to-Chat \(on ? "on" : "off")"
@@ -37,6 +44,7 @@ enum DeviceChange: Equatable, Sendable {
         case .voiceGuidance(let on): "Voice guidance \(on ? "on" : "off")"
         case .voiceGuidanceVolume: "Voice guidance volume"
         case .generalSetting: "Headphone setting"
+        case .generalSettingChoice: "Button assignment"
         case .assignable: "Button assignment"
         case .ncAmbButton: "NC/AMB button"
         case .headGesture(let on): "Head gestures \(on ? "on" : "off")"
@@ -67,23 +75,30 @@ enum DeviceChange: Equatable, Sendable {
                 if actual.ambientLevel != wanted.ambientLevel { return false }
                 if state.capabilities.noise?.supportsVoiceFocus == true, actual.focusOnVoice != wanted.focusOnVoice { return false }
             }
-            if state.capabilities.noise?.supportsAutoAmbient == true, actual.autoAmbient != wanted.autoAmbient { return false }
+            if state.capabilities.noise?.supportsAutoAmbient == true {
+                if actual.autoAmbient != wanted.autoAmbient || actual.adaptiveSensitivity != wanted.adaptiveSensitivity { return false }
+            }
             return true
         case .equalizerPreset(let id): return state.equalizer?.presetID == id
+        case .equalizerBank(let bank): return bank.matches(state.equalizerBank) && state.equalizer?.presetID == bank.activePresetID
         case .equalizerBands(let bands, let clearBass):
             guard let eq = state.equalizer else { return false }
             return eq.bands == bands && (clearBass == nil || eq.clearBass == clearBass)
         case .listeningMode(let mode): return state.listeningMode == mode
+        case .surroundPreset(let id): return state.surroundPreset == id
+        case .soundPosition(let position): return state.soundPosition == position
         case .upscaling(let on): return state.upscaling?.enabled == on
         case .connectionPriority(let value): return state.connectionPriority == value
         case .speakToChat(let on): return state.speakToChat?.enabled == on
-        case .speakToChatOptions(let sensitivity, let timeout):
+        case .speakToChatOptions(let sensitivity, let timeout, let voiceFocus):
             return state.speakToChat?.sensitivity == sensitivity && state.speakToChat?.timeout == timeout
+                && (voiceFocus == nil || state.speakToChat?.voiceFocus == voiceFocus)
         case .autoPowerOff(let id): return state.autoPowerOff == id
         case .autoPause(let on): return state.autoPause == on
         case .voiceGuidance(let on): return state.voiceGuidance == on
         case .voiceGuidanceVolume(let value): return state.voiceGuidanceVolume == value
         case .generalSetting(let slot, let value): return state.setting(slot: slot)?.value == value
+        case .generalSettingChoice(let slot, let index): return state.setting(slot: slot)?.selectedIndex == index
         case .assignable(let presets): return state.assignablePresets == presets
         case .ncAmbButton(let cycle): return state.ncAmbButton == cycle
         case .headGesture(let on): return state.headGesture == on
@@ -128,6 +143,18 @@ protocol HeadphoneDriver: AnyObject {
 }
 
 extension HeadphoneDriver {
+    /// The codec indicator is a music codec, not the HFP speech codec. Never infer a bitrate from it.
+    func refreshCodec() async throws {
+        guard state.capabilities.codecIndicator else { return }
+        do {
+            switch state.family {
+            case .v1?: _ = try await link.request([0x18, 0x00], expect: .init(.dataMdr, 0x19, 0x00))
+            case .v2?: _ = try await link.request([0x12, 0x02], expect: .init(.dataMdr, 0x13, 0x02))
+            case nil: state.codec = nil
+            }
+        } catch { state.codec = nil; throw error }
+    }
+
     /// Bluetooth volume synchronization may finish after the write ACK. Re-read, without sending the
     /// volume again, before deciding whether it matched, rounded, or failed.
     func readVolumeBack(_ requested: Int, payload: [UInt8], expect: MDRLink.Matcher) async throws {

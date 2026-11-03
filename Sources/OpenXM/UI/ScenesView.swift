@@ -30,6 +30,18 @@ struct ScenesView: View {
                     Label(error, systemImage: "exclamationmark.triangle").font(.caption11).foregroundStyle(Theme.warning)
                 }
 
+                if store.hasLocationScenes {
+                    Card("Place Automations", symbol: "location") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(store.location.status).font(.callout).foregroundStyle(Theme.secondary)
+                            if let error = store.location.error { Text(error).font(.caption).foregroundStyle(Theme.warning) }
+                            if store.location.permission == .notDetermined && !controller.isReplay {
+                                Button("Allow Location for Scenes…") { store.location.requestPermission() }
+                            }
+                        }
+                    }
+                }
+
                 if store.scenes.isEmpty {
                     Card {
                         VStack(spacing: 10) {
@@ -60,6 +72,7 @@ struct ScenesView: View {
             .frame(maxWidth: 1100, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
+        .onAppear { if store.hasLocationScenes { store.location.refreshPermission() } }
         .sheet(item: $editing) { scene in
             SceneEditor(scene: scene, isNew: store.scene(scene.id) == nil) { saved in
                 store.upsert(saved)
@@ -107,6 +120,9 @@ struct SceneCard: View {
                 Menu {
                     Button("Edit…", action: onEdit)
                     Button("Duplicate") { store.duplicate(scene.id) }
+                    if let index = store.scenes.firstIndex(where: { $0.id == scene.id }), index > 0 {
+                        Button("Move to Top") { store.move(from: IndexSet(integer: index), to: 0) }
+                    }
                     if scene.trigger.isAutomatic {
                         Button(scene.triggerEnabled ? "Pause Automation" : "Resume Automation") {
                             var copy = scene
@@ -270,6 +286,32 @@ struct SceneEditor: View {
                             }
                         }
                     }
+                    if !caps.surroundPresets.isEmpty || scene.surroundPreset != nil {
+                        editorSection("Surround (VPT)", include: Binding(
+                            get: { scene.surroundPreset != nil },
+                            set: { scene.surroundPreset = $0 ? (controller.state.surroundPreset ?? caps.surroundPresets.first?.id) : nil }
+                        )) {
+                            Picker("Surround (VPT)", selection: $scene.surroundPreset) {
+                                if let saved = scene.surroundPreset, !caps.surroundPresets.contains(where: { $0.id == saved }) {
+                                    Text(SurroundPreset.displayName(for: saved)).tag(Optional(saved))
+                                }
+                                ForEach(caps.surroundPresets) { Text($0.name).tag(Optional($0.id)) }
+                            }.labelsHidden()
+                        }
+                    }
+                    if !caps.soundPositions.isEmpty || scene.soundPosition != nil {
+                        editorSection("Sound Position Control", include: Binding(
+                            get: { scene.soundPosition != nil },
+                            set: { scene.soundPosition = $0 ? (controller.state.soundPosition ?? caps.soundPositions.first) : nil }
+                        )) {
+                            Picker("Sound Position Control", selection: $scene.soundPosition) {
+                                if let saved = scene.soundPosition, !caps.soundPositions.contains(saved) {
+                                    Text(saved.title).tag(Optional(saved))
+                                }
+                                ForEach(caps.soundPositions) { Text($0.title).tag(Optional($0)) }
+                            }.labelsHidden()
+                        }
+                    }
                     if caps.upscalingName != nil {
                         boolSection(caps.upscalingName ?? "DSEE", value: $scene.upscaling, current: controller.state.upscaling?.enabled)
                     }
@@ -294,6 +336,8 @@ struct SceneEditor: View {
             HStack {
                 if scene.isEmpty {
                     Label("Include at least one setting.", systemImage: "info.circle").font(.caption11).foregroundStyle(Theme.warning)
+                } else if !scene.trigger.isValid {
+                    Label("Choose a named place and valid radius.", systemImage: "location").font(.caption11).foregroundStyle(Theme.warning)
                 }
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
@@ -305,7 +349,7 @@ struct SceneEditor: View {
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.accent)
-                .disabled(scene.isEmpty)
+                .disabled(scene.isEmpty || !scene.trigger.isValid)
             }
             .padding(.horizontal, 24).padding(.vertical, 16)
             .background(Theme.sidebar)
@@ -402,7 +446,7 @@ struct TriggerEditor: View {
     @Binding var enabled: Bool
 
     private enum Kind: String, CaseIterable, Identifiable {
-        case manual = "Manual", onConnect = "On Connect", schedule = "Schedule", app = "App"
+        case manual = "Manual", onConnect = "On Connect", schedule = "Schedule", app = "App", location = "Place"
         var id: String { rawValue }
     }
 
@@ -412,6 +456,7 @@ struct TriggerEditor: View {
         case .onConnect: .onConnect
         case .schedule: .schedule
         case .appActivated: .app
+        case .location: .location
         }
     }
 
@@ -472,6 +517,11 @@ struct TriggerEditor: View {
                     Button("Choose App…") { chooseApp() }
                 }
                 hint("At most once every 10 minutes.")
+            case .location:
+                SceneLocationEditor(place: Binding(
+                    get: { if case .location(let place) = trigger { return place }; return SceneLocationTrigger() },
+                    set: { trigger = .location($0) }
+                ))
             }
         }
         .padding(14)
@@ -491,6 +541,7 @@ struct TriggerEditor: View {
         case .app:
             trigger = .appActivated(bundleID: "", appName: "")
             chooseApp()
+        case .location: trigger = .location(SceneLocationTrigger())
         }
     }
 

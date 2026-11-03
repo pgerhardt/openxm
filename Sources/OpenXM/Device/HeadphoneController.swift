@@ -58,8 +58,30 @@ final class HeadphoneController {
     let bluetooth = BluetoothAccess()
     let state = DeviceState()
     let systemNowPlaying = SystemNowPlaying()
+    let audioConnection = AudioConnectionMonitor()
+    let codecTransport = CodecTransportController()
+    var audioConnectionPresentation: AudioConnectionPresentation {
+        AudioConnectionPresentation(codec: codecTransport.isEngaged ? codecTransport.activeCodec : ((isConnected || isReplay) ? state.codec : nil),
+                                    route: isConnected && !isReplay ? audioConnection.snapshot : nil)
+    }
+    let listeningHistory = ListeningHistory()
+    let listeningContentHistory = ListeningContentHistory()
+    private var contentReadTask: Task<Void, Never>?
+    private var contentReadRevision = 0
+    private var lastContentRead: Date?
+    private var lastContentPlayer: SystemNowPlaying.Item?
+    @ObservationIgnored lazy var settingsBackup = SettingsBackupWorkflow(controller: self)
+    @ObservationIgnored lazy var firmwareUpdate = FirmwareUpdateWorkflow(controller: self)
+    @ObservationIgnored lazy var guidancePackages = GuidancePackageWorkflow(controller: self)
+    @ObservationIgnored lazy var equalizerGuide = EqualizerGuideWorkflow(controller: self)
+    private(set) var settingsOperationInProgress = false
+    private(set) var optimizerCommandInProgress = false
+    private(set) var firmwareOperationInProgress = false
+    private(set) var firmwareControlsReserved = false
 
     private(set) var phase: ConnectionPhase = .starting
+    private(set) var pairing: HeadphonePairing?
+    var isPairing: Bool { pairing != nil }
     private(set) var knownHeadphones: [KnownHeadphones] = []
     private(set) var traffic: [TrafficEntry] = []
     private(set) var verifications: [VerificationRecord] = []
@@ -68,7 +90,10 @@ final class HeadphoneController {
     var toast: Toast?
 
     var selectedAddress: String? {
-        didSet { UserDefaults.standard.set(selectedAddress, forKey: "selectedAddress") }
+        didSet {
+            UserDefaults.standard.set(selectedAddress, forKey: "selectedAddress")
+            if oldValue != selectedAddress, codecTransport.isEngaged { codecTransport.stop(reason: "The selected headphones changed.") }
+        }
     }
 
     private var transport: RFCOMMTransport?
@@ -77,6 +102,11 @@ final class HeadphoneController {
     private var connectTask: Task<Void, Never>?
     private var generation = 0
     private var refreshTimer: Timer?
+    private var audioConnectionTimer: Timer?
+    private var codecRefreshTask: Task<Void, Never>?
+    private var lastCodecPoll: Date?
+    private var historyTimer: Timer?
+    private var historyObservationStarted = false
     private var connectNotification: IOBluetoothUserNotification?
     private var disconnectNotifications: [String: IOBluetoothUserNotification] = [:]
     private var userDisconnected = false
@@ -94,7 +124,42 @@ final class HeadphoneController {
     var isReplay: Bool { replaySource != nil }
     var isDemo: Bool { replaySource == "Built-in preview" }
     /// Writes are possible only on a live, initialized connection.
-    var canWrite: Bool { phase.isConnected && !isReplay }
+    var canWrite: Bool { phase.isConnected && !isReplay && !settingsOperationInProgress && !optimizerCommandInProgress && !firmwareControlsReserved && !equalizerGuide.reserved && !codecTransport.isTransitioning }
+    var canSelectCodec: Bool {
+        !isReplay && !settingsOperationInProgress && !optimizerCommandInProgress && !firmwareControlsReserved
+            && !equalizerGuide.reserved && !hasPendingWrites && !codecTransport.installingDriver
+            && (isConnected || codecTransport.hasConfirmedSession)
+            && (state.modelName == "WH-1000XM3" || (codecTransport.hasConfirmedSession && codecTransport.sessionAddress == selectedAddress))
+    }
+
+    func selectCodec(_ selection: CodecSelection) {
+        guard !isReplay else { return }
+        if selection == .automatic {
+            if let selectedAddress { codecTransport.select(.automatic, address: selectedAddress) }
+            else { codecTransport.stop() }
+            return
+        }
+        guard canSelectCodec, let selectedAddress else { return }
+        if codecTransport.canStartSession {
+            // Let the helper finish its one deliberate Bluetooth takeover before
+            // opening Sony's RFCOMM controls on the new baseband connection.
+            generation += 1; connectTask?.cancel(); connectTask = nil
+            dropConnection(); phase = .waiting(selectedName)
+        }
+        // An old Sony report must not appear to confirm the new request.
+        state.codec = nil; lastCodecPoll = nil
+        codecTransport.select(selection, address: selectedAddress)
+    }
+    var canAdjustNoise: Bool { canWrite && state.noiseControlAvailable }
+
+    var canStartNoiseOptimizer: Bool {
+        canWrite && !hasPendingWrites && dragTask == nil && state.capabilities.ncOptimizerCapability != nil
+            && state.optimizerAvailable == true && state.optimizer.canStart
+    }
+
+    var canCancelNoiseOptimizer: Bool {
+        canWrite && state.optimizer.isActive
+    }
 
     /// The latest noise-control request not yet confirmed. Quick successive edits (mode, voice focus, level) build
     /// on it, so one request never overwrites another's fields with stale state.
@@ -102,13 +167,30 @@ final class HeadphoneController {
     /// Set when the user accepts a headset prompt that makes it restart its Bluetooth link (multipoint,
     /// connection quality, button assignment): the following link drop is expected, not an error.
     private var reconnectExpectedUntil: Date?
-    private var reconnectExpected: Bool { (reconnectExpectedUntil.map { $0 > Date() }) ?? false }
+    var reconnectExpected: Bool { (reconnectExpectedUntil.map { $0 > Date() }) ?? false }
     /// Set when the user declines a headset prompt: the unchanged read-back is a cancellation, not a failure.
     private var alertDeclinedAt: Date?
     var noiseBase: NoiseControl? { noiseIntent ?? state.noise }
 
     init() {
         selectedAddress = UserDefaults.standard.string(forKey: "selectedAddress")
+        codecTransport.onRouteNotice = { [weak self] message in self?.showToast(.info, message) }
+        codecTransport.onReady = { [weak self] in
+            guard let self else { return }
+            self.lastCodecPoll = nil
+            if !self.isConnected, let address = self.selectedAddress {
+                self.connect(address: address, initiate: false)
+            } else { self.refreshAudioConnection() }
+        }
+        codecTransport.onStopped = { [weak self] in
+            guard let self else { return }
+            self.state.codec = nil; self.lastCodecPoll = nil
+            if !self.userDisconnected, !self.isConnected, let address = self.selectedAddress,
+               self.device(for: address)?.isConnected() == true {
+                self.connect(address: address, initiate: false)
+            }
+            self.refreshAudioConnection()
+        }
     }
 
     var selectedName: String {
@@ -116,13 +198,123 @@ final class HeadphoneController {
     }
 
     var isConnected: Bool { phase.isConnected }
+    /// Invalidates firmware-sheet identity reads after a control-channel reconnect.
+    var firmwareIdentityGeneration: Int { generation }
 
     // MARK: Startup
 
     func start() {
         guard !isReplay else { return }
+        codecTransport.refreshAvailability()
+        codecTransport.recoverIfNeeded()
+        firmwareControlsReserved = FirmwareJournalStore.exists || GuidanceJournalStore.exists || FirmwareAccessLock.isHeld
         bluetooth.start()
+        if audioConnectionTimer == nil {
+            audioConnectionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshAudioConnection() }
+            }
+        }
         observeBluetoothStatus()
+        if !historyObservationStarted {
+            historyObservationStarted = true
+            observeListeningStatus()
+            historyTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.sampleListeningHistory() }
+            }
+        }
+    }
+
+    private func observeListeningStatus() {
+        withObservationTracking {
+            _ = phase; _ = state.nowPlaying; _ = selectedAddress
+            _ = listeningContentHistory.enabled; _ = systemNowPlaying.item
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.sampleListeningHistory()
+                self?.observeListeningStatus()
+            }
+        }
+        sampleListeningHistory()
+    }
+
+    private func sampleListeningHistory() {
+        state.expirePlaybackMetadata()
+        let live = phase.isConnected && !isReplay
+        listeningHistory.sample(device: live ? selectedAddress : nil, model: live ? state.modelName : nil,
+                                playback: state.nowPlaying)
+        sampleListeningContent()
+    }
+
+    func stopListeningSamples() {
+        listeningHistory.stopSample()
+        cancelContentRead()
+        listeningContentHistory.stopSample()
+        lastContentRead = nil
+    }
+
+    private func cancelContentRead() {
+        contentReadRevision += 1
+        contentReadTask?.cancel(); contentReadTask = nil
+    }
+
+    private func sampleListeningContent() {
+        let now = Date()
+        guard listeningContentHistory.enabled, phase.isConnected, !isReplay,
+              let address = selectedAddress, let model = state.modelName,
+              state.nowPlaying.hasFreshListeningStatus(at: now) else {
+            cancelContentRead(); listeningContentHistory.stopSample(); lastContentRead = nil
+            listeningContentHistory.recordingStatus = .waitingForPlayback; return
+        }
+        guard state.nowPlaying.status == .playing else {
+            cancelContentRead()
+            listeningContentHistory.pause(device: address, model: model, at: now)
+            listeningContentHistory.recordingStatus = .paused
+            lastContentRead = nil; return
+        }
+        if let content = ListeningContentAttribution.headphone(state.nowPlaying, at: now) {
+            cancelContentRead()
+            listeningContentHistory.sample(device: address, model: model, content: content, at: now)
+            listeningContentHistory.recordingStatus = .recording
+            lastContentRead = nil; return
+        }
+        guard let player = systemNowPlaying.item, player.playing else {
+            cancelContentRead(); listeningContentHistory.stopSample(); lastContentRead = nil
+            listeningContentHistory.recordingStatus = .metadataUnavailable; return
+        }
+        // Avoid spawning a metadata helper for every volume/battery/elapsed-time update.
+        let changed = lastContentPlayer?.sameContentAndPlayer(as: player) != true
+        if changed { cancelContentRead(); listeningContentHistory.stopSample() }
+        guard contentReadTask == nil, changed || lastContentRead.map({ now.timeIntervalSince($0) >= 12 }) ?? true else { return }
+        lastContentRead = now; lastContentPlayer = player
+        listeningContentHistory.recordingStatus = .readingMetadata
+        let revision = contentReadRevision
+        let connection = generation
+        contentReadTask = Task { [weak self] in
+            guard let self else { return }
+            let result = await systemNowPlaying.readHistorySnapshot()
+            guard !Task.isCancelled, revision == contentReadRevision else { return }
+            contentReadTask = nil
+            guard listeningContentHistory.enabled, connection == generation, phase.isConnected,
+                  selectedAddress == address, state.modelName == model else {
+                listeningContentHistory.stopSample(); return
+            }
+            let item: SystemNowPlaying.Item
+            switch result {
+            case .ready(let value): item = value
+            case .unavailable(let reason):
+                listeningContentHistory.recordingStatus = .metadataReadFailed(reason)
+                listeningContentHistory.stopSample(); return
+            case .changed:
+                listeningContentHistory.recordingStatus = .metadataChanged
+                listeningContentHistory.stopSample(); return
+            }
+            let route = PlayerAudioRoute.matches(processIdentifier: item.processIdentifier,
+                                                  bundleIdentifier: item.bundleIdentifier, headphoneAddress: address)
+            let date = Date()
+            let content = ListeningContentAttribution.mac(item, playback: state.nowPlaying, routeMatches: route, at: date)
+            listeningContentHistory.sample(device: address, model: model, content: content, at: date)
+            listeningContentHistory.recordingStatus = content != nil ? .recording : route ? .waitingForPlayback : .unmatchedOutput
+        }
     }
 
     /// Loads a `--probe` report recorded from real hardware and runs its received frames through the normal V1
@@ -228,6 +420,21 @@ final class HeadphoneController {
 
     // MARK: Discovery
 
+    /// Explicit onboarding; discovering a device never initiates pairing until the user selects it.
+    func pairNewHeadphones() {
+        guard !isReplay, !firmwareControlsReserved, !settingsOperationInProgress, !phase.isBusy, !isPairing, bluetooth.status == .ready else { return }
+        pairing = HeadphonePairing { [weak self] address in
+            self?.dismissPairing()
+            self?.rescan()
+            self?.connect(address: address, initiate: true)
+        }
+    }
+
+    func dismissPairing() {
+        pairing?.stop()
+        pairing = nil
+    }
+
     func rescan() {
         guard bluetooth.status == .ready else { return }
         let paired = (IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice]) ?? []
@@ -268,6 +475,7 @@ final class HeadphoneController {
 
     fileprivate func basebandConnected(_ device: IOBluetoothDevice) {
         rescan()
+        guard !firmwareControlsReserved else { return }
         guard let address = device.addressString?.uppercased().replacingOccurrences(of: "-", with: ":") else { return }
         if address == selectedAddress {
             userDisconnected = false
@@ -292,9 +500,10 @@ final class HeadphoneController {
     // MARK: Connection
 
     func autoConnectIfPossible() {
-        guard bluetooth.status == .ready, !userDisconnected, link == nil, connectTask == nil,
+        guard !codecTransport.isTransitioning, !firmwareControlsReserved, bluetooth.status == .ready, !userDisconnected, link == nil, connectTask == nil,
               let address = selectedAddress,
-              let known = knownHeadphones.first(where: { $0.address == address }), known.isConnected else { return }
+              let known = knownHeadphones.first(where: { $0.address == address }),
+              known.isConnected || (codecTransport.hasConfirmedSession && codecTransport.sessionAddress == address) else { return }
         connect(address: address, initiate: false)
     }
 
@@ -307,6 +516,12 @@ final class HeadphoneController {
     /// the previous one to unwind before opening.
     func connect(address: String, initiate: Bool) {
         guard bluetooth.status == .ready, !isReplay else { return }
+        guard !firmwareOperationInProgress else { return }
+        firmwareControlsReserved = FirmwareJournalStore.exists || GuidanceJournalStore.exists || FirmwareAccessLock.isHeld
+        guard !firmwareControlsReserved else {
+            showToast(.warning, "Firmware work owns this connection. Open Headphone Firmware to inspect or resume it.")
+            return
+        }
         let previous = connectTask
         previous?.cancel()
         generation += 1
@@ -339,9 +554,14 @@ final class HeadphoneController {
         var ownedTransport: RFCOMMTransport?
         var ownedLink: MDRLink?
         do {
-            let transport = try await RFCOMMTransport.open(device: device, allowBasebandConnect: initiate)
+            // The private A2DP connection can be live while IOBluetooth's cached
+            // isConnected remains false. An accepted stream on this same paired
+            // device is sufficient evidence to open its Sony control channel.
+            let codecConnected = codecTransport.hasConfirmedSession && codecTransport.sessionAddress == address
+            let transport = try await RFCOMMTransport.open(device: device, allowBasebandConnect: initiate || codecConnected)
             ownedTransport = transport
             guard isCurrent(attempt) else { throw CancellationError() }
+            guard let family = transport.family else { throw TransportError.serviceNotFound }
             let link = MDRLink(transport: transport)
             ownedLink = link
             state.reset()
@@ -363,7 +583,7 @@ final class HeadphoneController {
             self.link = link
             self.driver = driver
             traffic.removeAll()
-            appendNote("Opened \(transport.family.rawValue) control channel \(transport.channelID) to \(name)")
+            appendNote("Opened \(family.rawValue) control channel \(transport.channelID) to \(name)")
             phase = .initializing(name)
             // WH-1000XM4 ignores a frame sent in the first instant after the channel opens (observed: the first
             // GET protocol always needed a retry). A short settle avoids a one-second stall.
@@ -373,8 +593,10 @@ final class HeadphoneController {
             guard isCurrent(attempt) else { throw CancellationError() }
             phase = .connected
             reconnectAttempt = 0
+            reconnectExpectedUntil = nil
             lastRefresh = Date()
             startRefreshTimer()
+            refreshAudioConnection()
             onConnected?()
         } catch {
             // Close what this attempt opened; shared state only belongs to the current generation.
@@ -396,6 +618,7 @@ final class HeadphoneController {
 
     func disconnect() {
         guard !isReplay else { return }
+        if codecTransport.isEngaged { codecTransport.stop() }
         userDisconnected = true
         generation += 1
         connectTask?.cancel()
@@ -405,6 +628,8 @@ final class HeadphoneController {
     }
 
     private func dropConnection() {
+        audioConnection.clear()
+        codecRefreshTask?.cancel(); codecRefreshTask = nil; lastCodecPoll = nil
         refreshTimer?.invalidate()
         refreshTimer = nil
         dragTask?.cancel()
@@ -449,10 +674,11 @@ final class HeadphoneController {
             MainActor.assumeIsolated {
                 // Anything that happened meanwhile (manual connect, disconnect, success) supersedes this timer.
                 guard let self, self.generation == scheduledGeneration, self.link == nil, self.connectTask == nil,
-                      !self.userDisconnected else { return }
+                      !self.userDisconnected, !self.codecTransport.isTransitioning else { return }
                 self.rescan()
                 guard let address = self.selectedAddress,
-                      self.knownHeadphones.first(where: { $0.address == address })?.isConnected == true else {
+                      self.knownHeadphones.first(where: { $0.address == address })?.isConnected == true
+                        || (self.codecTransport.hasConfirmedSession && self.codecTransport.sessionAddress == address) else {
                     self.phase = .waiting(name)
                     return
                 }
@@ -481,12 +707,40 @@ final class HeadphoneController {
         }
     }
 
+    /// Restore a saved codec once ready, then refresh live audio evidence. Codec
+    /// reads share the serialized headphone link; Mac route reads are independent.
+    private func refreshAudioConnection() {
+        codecTransport.checkHealth()
+        if isConnected, !userDisconnected, connectTask == nil, canSelectCodec,
+           let address = selectedAddress, let selection = codecTransport.takeLaunchSelection(address: address) {
+            selectCodec(selection)
+        }
+        audioConnection.refresh(address: (isConnected || codecTransport.isEngaged) && !isReplay ? selectedAddress : nil)
+        guard canWrite, let link, let driver, state.capabilities.codecIndicator,
+              codecRefreshTask == nil, lastCodecPoll.map({ Date().timeIntervalSince($0) >= 10 }) ?? true else { return }
+        lastCodecPoll = Date()
+        let attempt = generation
+        codecRefreshTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { if self.generation == attempt { self.codecRefreshTask = nil } }
+            do {
+                try await link.exclusive {
+                    guard self.link === link, self.canWrite, !Task.isCancelled else { return }
+                    try await driver.refreshCodec()
+                }
+            } catch {
+                if self.link === link { self.state.codec = nil }
+            }
+        }
+    }
+
     // MARK: Writes
 
     /// Writes a change, reads it back (mandatory reply) and compares — all inside one exclusive transaction —
     /// then records whether the headset kept it.
     @discardableResult
     func perform(_ change: DeviceChange, quiet: Bool = false) async -> Bool {
+        guard !settingsOperationInProgress, !firmwareControlsReserved, !equalizerGuide.reserved else { return false }
         if isReplay {
             if !quiet { showToast(.warning, "This is a read-only replay. Nothing is sent to headphones.") }
             return false
@@ -543,6 +797,7 @@ final class HeadphoneController {
     @discardableResult
     func performGroup(_ changes: [DeviceChange], quiet: Bool = false) async -> (confirmed: Int, failed: String?) {
         guard !changes.isEmpty else { return (0, nil) }
+        guard !settingsOperationInProgress, !firmwareControlsReserved, !equalizerGuide.reserved else { return (0, "Settings or firmware work is in progress") }
         if isReplay {
             if !quiet { showToast(.warning, "This is a read-only replay. Nothing is sent to headphones.") }
             return (0, changes[0].label)
@@ -589,7 +844,7 @@ final class HeadphoneController {
 
     /// Noise control from the UI: builds on the latest pending request (see `noiseIntent`).
     func requestNoise(_ mutate: (inout NoiseControl) -> Void) {
-        guard canWrite, var value = noiseBase else { return }
+        guard canAdjustNoise, var value = noiseBase else { return }
         mutate(&value)
         noiseIntent = value
         latestDrag = nil
@@ -616,7 +871,7 @@ final class HeadphoneController {
     /// Live slider drags: coalesced "in progress" writes without read-back (the release commits with one).
     /// Bound to the link that was current when the drag began; stops on cancellation or reconnection.
     func dragNoise(_ value: NoiseControl) {
-        guard canWrite else { return }
+        guard canAdjustNoise else { return }
         latestDrag = value
         guard dragTask == nil, let link, let driver else { return }
         dragTask = Task { @MainActor [weak self] in
@@ -641,27 +896,43 @@ final class HeadphoneController {
     func answerAlert(accept: Bool) {
         guard let alert = state.alert else { return }
         state.alert = nil
-        guard alert.requiresAnswer, canWrite, let driver else { return }
+        // Restore owns the normal write gate, but its device confirmations must still be answerable.
+        guard alert.requiresAnswer, phase.isConnected, !isReplay, let driver else { return }
         Task { @MainActor in
-            do {
-                // Not inside `exclusive`: the transaction that triggered the alert is still holding the gate while
-                // it waits for its read-back, which the headset only sends after this answer. The link itself
-                // still keeps one frame in flight.
+            await sendAlertAnswer(alert, accept: accept) {
                 try await driver.answerAlert(alert, accept: accept)
-                if accept, alert.messageType != 0x08 { reconnectExpectedUntil = Date().addingTimeInterval(60) }
-                if !accept { alertDeclinedAt = Date() }
-            } catch {
-                showToast(.error, error.localizedDescription)
             }
         }
     }
 
+    /// The XM3 can close the link before acknowledging an accepted restart prompt. Arm reconnection before
+    /// sending the answer, not after its ACK. A link close still requires fresh settings after reconnection.
+    /// Kept outside `exclusive`: the original settings transaction is waiting for this answer's read-back.
+    func sendAlertAnswer(_ alert: DeviceAlert, accept: Bool, send: () async throws -> Void) async {
+        let expectsRestart = accept && alert.reconnectsWhenAccepted
+        let previousDeadline = reconnectExpectedUntil
+        let deadline = Date().addingTimeInterval(60)
+        if expectsRestart { reconnectExpectedUntil = deadline }
+        do {
+            try await send()
+            if !accept { alertDeclinedAt = Date() }
+        } catch {
+            if expectsRestart, case MDRLink.LinkError.closed = error {
+                showToast(.info, "The headphones are restarting their connection. Reconnecting…")
+                return
+            }
+            if expectsRestart, reconnectExpectedUntil == deadline { reconnectExpectedUntil = previousDeadline }
+            if !(error is CancellationError) { showToast(.error, error.localizedDescription) }
+        }
+    }
+
     func startNoiseOptimizer() {
-        guard canWrite, let link, let driver else { return }
+        guard canStartNoiseOptimizer, let link, let driver else { return }
+        optimizerCommandInProgress = true
         Task { @MainActor in
+            defer { optimizerCommandInProgress = false }
             do {
                 try await link.exclusive { try await driver.startNoiseOptimizer() }
-                state.optimizer = .running
             } catch {
                 showToast(.error, error.localizedDescription)
             }
@@ -669,8 +940,16 @@ final class HeadphoneController {
     }
 
     func cancelNoiseOptimizer() {
-        guard canWrite, let link, let driver else { return }
-        Task { @MainActor in try? await link.exclusive { try await driver.cancelNoiseOptimizer() } }
+        guard canCancelNoiseOptimizer, let link, let driver else { return }
+        optimizerCommandInProgress = true
+        Task { @MainActor in
+            defer { optimizerCommandInProgress = false }
+            do {
+                try await link.exclusive { try await driver.cancelNoiseOptimizer() }
+            } catch {
+                showToast(.error, error.localizedDescription)
+            }
+        }
     }
 
     func powerOff() {
@@ -683,6 +962,222 @@ final class HeadphoneController {
                 showToast(.error, error.localizedDescription)
             }
         }
+    }
+
+    // MARK: Settings backup and restore
+
+    /// Firmware reads and transfers own the connection until explicitly released. Wait for any cancelled
+    /// connection attempt to unwind before opening another RFCOMM service to the same headset.
+    func beginFirmwareAccess() async throws {
+        guard !codecTransport.isEngaged else {
+            throw FirmwareError.invalid("Return the codec selection to Automatic and wait for audio cleanup before firmware work.")
+        }
+        guard !isReplay, !firmwareOperationInProgress, !settingsOperationInProgress, !equalizerGuide.reserved, !hasPendingWrites,
+              dragTask == nil, !isPairing, !optimizerCommandInProgress, !state.optimizer.isActive, bluetooth.status == .ready else {
+            throw FirmwareError.invalid("Wait for other headphone operations to finish and enable Bluetooth first.")
+        }
+        firmwareOperationInProgress = true
+        firmwareControlsReserved = true
+        let previous = connectTask
+        disconnect()
+        state.alert = nil
+        await previous?.value
+    }
+
+    func endFirmwareAccess() {
+        firmwareOperationInProgress = false
+        refreshFirmwareReservation()
+    }
+
+    func refreshFirmwareReservation() {
+        guard !firmwareOperationInProgress, !isReplay else { return }
+        let wasReserved = firmwareControlsReserved
+        firmwareControlsReserved = FirmwareJournalStore.exists || GuidanceJournalStore.exists || FirmwareAccessLock.isHeld
+        if wasReserved && !firmwareControlsReserved {
+            userDisconnected = false
+            rescan()
+            autoConnectIfPossible()
+        }
+    }
+
+    func beginSettingsOperation() throws {
+        guard canWrite, !hasPendingWrites, dragTask == nil, !state.optimizer.isActive else {
+            throw SettingsBackupError.invalid("Connect your headphones and wait for other changes to finish.")
+        }
+        settingsOperationInProgress = true
+    }
+
+    func endSettingsOperation() { settingsOperationInProgress = false }
+
+    func beginEqualizerGuideOperation() throws {
+        guard phase.isConnected, !isReplay, !settingsOperationInProgress, !optimizerCommandInProgress,
+              !firmwareControlsReserved, !hasPendingWrites, dragTask == nil, !state.optimizer.isActive else {
+            throw SettingsBackupError.invalid("Connect your headphones and wait for other changes to finish.")
+        }
+        settingsOperationInProgress = true
+    }
+
+    func prepareEqualizerGuide(address: String, persist: (EqualizerGuideRecord) throws -> Void) async throws -> EqualizerGuideRecord {
+        try await withFreshSettingsState(address: address) { reader, _, _ in
+            try await EqualizerGuideDeviceAccess.prepare(driver: reader, address: address, persist: persist)
+        }
+    }
+
+    func previewEqualizerGuide(_ curve: EqualizerGuideCurve?, record: EqualizerGuideRecord) async throws {
+        try await withEqualizerGuideDriver(record: record) { driver in
+            try await EqualizerGuideDeviceAccess.preview(curve, record: record, address: record.address, driver: driver)
+        }
+    }
+
+    func finishEqualizerGuide(saving curve: EqualizerGuideCurve?, record: EqualizerGuideRecord) async throws {
+        try await withFreshSettingsState(address: record.address) { reader, _, _ in
+            try await EqualizerGuideDeviceAccess.finish(saving: curve, record: record, address: record.address, driver: reader)
+        }
+    }
+
+    /// The normal driver has freshly initialized this connection's identity and capabilities. Its EQ
+    /// writes reread availability and the destination slot. Keep the dependent writes exclusive without
+    /// repeating every unrelated capability query between listening comparisons.
+    private func withEqualizerGuideDriver(record: EqualizerGuideRecord,
+        body: (HeadphoneDriver) async throws -> Void) async throws {
+        guard settingsOperationInProgress, !isReplay, phase.isConnected, selectedAddress == record.address,
+              let link, let driver else { throw SettingsBackupError.invalid("Reconnect the original headphones to restore their EQ.") }
+        let attempt = generation
+        try await link.exclusive {
+            guard self.link === link, self.generation == attempt, self.selectedAddress == record.address else { throw MDRLink.LinkError.closed }
+            try record.validate(state: self.state, address: record.address)
+            try await body(driver)
+            guard self.link === link, self.generation == attempt, self.selectedAddress == record.address,
+                  self.phase.isConnected else { throw MDRLink.LinkError.closed }
+        }
+    }
+
+    /// A GUI identity check can share the existing control channel. Closing and immediately reopening it
+    /// can time out on an otherwise connected XM3. Installation still uses its separate reserved connection.
+    func readFirmwareIdentity(address: String) async throws -> FirmwareIdentity {
+        guard settingsOperationInProgress, !isReplay, phase.isConnected, selectedAddress == address,
+              state.family == .v1, let link else {
+            throw FirmwareError.invalid("Connect the selected WH-1000XM3 before checking its firmware identity.")
+        }
+        let attempt = generation
+        return try await link.exclusive {
+            guard self.link === link, self.generation == attempt else { throw MDRLink.LinkError.closed }
+            let identity = try await FirmwareDeviceAccess.readIdentity { payload, matcher in
+                try await link.request(payload, expect: matcher)
+            }
+            guard self.link === link, self.generation == attempt, self.selectedAddress == address,
+                  self.phase.isConnected else { throw MDRLink.LinkError.closed }
+            return identity
+        }
+    }
+
+    /// Decode into a blank state. Missing replies stay nil instead of inheriting a previous session's values.
+    /// The live parser still sees notifications, including device confirmation prompts.
+    func readSettingsState(address: String, includeCustomEQ: Bool = false, matching backup: SettingsBackup? = nil) async throws -> DeviceState {
+        try await withFreshSettingsState(address: address) { reader, fresh, _ in
+            // A restore must establish the expected device before any temporary preset selection.
+            if let backup { _ = try backup.plan(for: fresh) }
+            if includeCustomEQ { _ = try await reader.captureEqualizerBank() }
+            return fresh
+        }
+    }
+
+    /// Read the ordinary firmware region and language-service map in the same connection transaction.
+    /// A displayed/cached language or a model name alone is insufficient to choose a download service.
+    func readGuidancePackageRequest(address: String, language: GuidanceLanguage) async throws -> GuidancePackageRequest {
+        try await withFreshGuidanceState(address: address) { fresh, category, service, _ in
+            try GuidancePackageRequest.make(state: fresh, firmwareCategory: category,
+                                            firmwareService: service, language: language)
+        }
+    }
+
+    private func withFreshGuidanceState<Result>(address: String,
+        body: (DeviceState, String, String, MDRLink) async throws -> Result) async throws -> Result {
+        guard state.family == .v1 else { throw FirmwareError.invalid("Voice-package discovery requires a V1 WH-1000XM3.") }
+        return try await withFreshSettingsState(address: address) { _, fresh, link in
+            func text(_ selector: UInt8) async throws -> String {
+                let response = try await link.request([0x36, selector], expect: .init(.dataMdr, 0x37, selector))
+                var reader = ByteReader(response, offset: 2)
+                let value = try reader.string()
+                guard reader.isAtEnd, !value.isEmpty else { throw FirmwareError.invalid("Incomplete firmware region reply.") }
+                return value
+            }
+            let category = try await text(2)
+            let service = try await text(3)
+            return try await body(fresh, category, service, link)
+        }
+    }
+
+    private func withFreshSettingsState<Result>(address: String,
+        body: (HeadphoneDriver, DeviceState, MDRLink) async throws -> Result) async throws -> Result {
+        guard settingsOperationInProgress, !isReplay, phase.isConnected, selectedAddress == address,
+              let link, let family = state.family else {
+            throw SettingsBackupError.invalid("The selected headphones are no longer connected.")
+        }
+        let attempt = generation
+        return try await link.exclusive {
+            guard self.link === link, self.generation == attempt else { throw MDRLink.LinkError.closed }
+            let fresh = DeviceState()
+            fresh.family = family
+            let reader: HeadphoneDriver = family == .v1
+                ? V1Driver(link: link, state: fresh, subscribesToAlerts: false)
+                : V2Driver(link: link, state: fresh, subscribesToAlerts: false)
+            let liveHandler = link.onFrame
+            link.onFrame = { frame in liveHandler?(frame); reader.handle(frame) }
+            defer { link.onFrame = liveHandler }
+            try await reader.initialize()
+            let result = try await body(reader, fresh, link)
+            try Task.checkCancellation()
+            guard self.link === link, self.generation == attempt, self.selectedAddress == address else {
+                throw MDRLink.LinkError.closed
+            }
+            return result
+        }
+    }
+
+    /// Keep dependent writes (notably editable EQ selection + bands) in one transaction. A reconnect is not
+    /// success: the workflow must obtain a fresh value from the same headset before continuing.
+    func restoreSetting(_ entry: SettingsRestoreEntry, backup: SettingsBackup, address: String) async -> SettingsRestoreOutcome {
+        guard settingsOperationInProgress, !isReplay, phase.isConnected, selectedAddress == address,
+              state.modelName == backup.model, state.family == backup.family, let link, let driver else {
+            return .failed("The selected headphones changed or disconnected.")
+        }
+        do {
+            return try await link.exclusive {
+                guard self.link === link, self.selectedAddress == address else { throw MDRLink.LinkError.closed }
+                let changes = try entry.setting.changes(for: state)
+                var adjustments: [String] = []
+                for change in changes {
+                    try Task.checkCancellation()
+                    try await driver.apply(change)
+                    if change.isReflected(in: state) == true { record(change.label, .confirmed) }
+                    else if let adjustment = change.adjustment(in: state) {
+                        record(change.label, .adjusted(adjustment)); adjustments.append(adjustment)
+                    } else {
+                        record(change.label, .mismatch)
+                        return .failed("The headphones did not confirm \(entry.setting.title).")
+                    }
+                }
+                return adjustments.isEmpty ? .confirmed : .adjusted(adjustments.joined(separator: " "))
+            }
+        } catch {
+            if reconnectExpected, case MDRLink.LinkError.closed = error { return .waitingForReconnect }
+            record(entry.setting.title, .failed(error.localizedDescription))
+            return .failed(error.localizedDescription)
+        }
+    }
+
+    func waitForSettingsReconnect(address: String) async throws {
+        let deadline = Date().addingTimeInterval(90)
+        repeat {
+            try Task.checkCancellation()
+            guard selectedAddress == address, !userDisconnected else {
+                throw SettingsBackupError.invalid("Restore stopped because the selected headphones changed or were disconnected.")
+            }
+            if phase.isConnected { return }
+            try await Task.sleep(for: .milliseconds(500))
+        } while Date() < deadline
+        throw SettingsBackupError.invalid("The headphones have not reconnected. Reconnect them, then review the backup again.")
     }
 
     // MARK: Bookkeeping

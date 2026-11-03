@@ -13,6 +13,9 @@ struct DeviceSettingsView: View {
             VStack(alignment: .leading, spacing: Theme.cardSpacing) {
                 PageHeader(title: "Settings")
                 AdaptiveColumns {
+                    if controller.equalizerGuide.reserved { EqualizerGuideCard() }
+                    SettingsBackupCard()
+                    FirmwareUpdateCard()
                     AppPreferencesCard()
                     UpdatesCard()
                     Card("Headphones", symbol: "headphones") {
@@ -39,17 +42,20 @@ struct DeviceSettingsView: View {
             VStack(alignment: .leading, spacing: Theme.cardSpacing) {
                 PageHeader(title: "Headphone Settings")
                 AdaptiveColumns {
+                    if controller.equalizerGuide.reserved { EqualizerGuideCard() }
                     if caps.speakToChat { SpeakToChatCard() }
                     if caps.autoPause || !caps.autoPowerOffOptions.isEmpty { WearingPowerCard() }
-                    if !caps.assignableKeys.isEmpty || state.generalSettings.contains(where: { $0.key == "TOUCH_PANEL_SETTING" }) || caps.ncAmbButton || caps.headGesture {
+                    if !caps.assignableKeys.isEmpty || state.generalSettings.contains(where: { $0.key == "TOUCH_PANEL_SETTING" || ($0.isButtonAssignment && $0.isList) }) || caps.ncAmbButton || caps.headGesture {
                         ControlsCard()
                     }
-                    if state.generalSettings.contains(where: { $0.key != "TOUCH_PANEL_SETTING" }) || caps.pairedDevices {
+                    if state.generalSettings.contains(where: { $0.key != "TOUCH_PANEL_SETTING" && $0.isBoolean }) || caps.pairedDevices {
                         ConnectivityCard()
                     }
-                    if caps.voiceGuidance { VoiceGuidanceCard() }
+                    if caps.voiceGuidance || caps.voiceGuidanceCapability?.supportsLanguage == true { VoiceGuidanceCard() }
                     if caps.ncOptimizer { OptimizerCard() }
                     DeviceInfoCard()
+                    SettingsBackupCard()
+                    FirmwareUpdateCard()
                     AppPreferencesCard()
                     UpdatesCard()
                 }
@@ -140,6 +146,9 @@ struct ControlsCard: View {
                         .disabled(!controller.canWrite || current == nil)
                     }
                 }
+                ForEach(state.generalSettings.filter { $0.isButtonAssignment && $0.isList }) { setting in
+                    GeneralSettingChoiceRow(setting: setting)
+                }
                 if caps.ncAmbButton {
                     RowDivider()
                     SettingRow(symbol: "circle.lefthalf.filled", title: "NC/AMB Button Cycles") {
@@ -176,12 +185,44 @@ struct ControlsCard: View {
     }
 }
 
+/// XM3 receives its choices from the headphones; no unsupported actions are offered.
+private struct GeneralSettingChoiceRow: View {
+    @Environment(HeadphoneController.self) private var controller
+    @State private var assistantGuide: XM3AssistantGuide?
+    let setting: GeneralSetting
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(setting.title, systemImage: "button.programmable")
+                .font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.text)
+            Picker(setting.title, selection: Binding<UInt8?>(
+                get: { setting.selectedIndex },
+                set: { if let index = $0 { controller.apply(.generalSettingChoice(slot: setting.slot, index: index)) } }
+            )) {
+                if setting.selectedIndex == nil { Text("Reading…").tag(nil as UInt8?) }
+                ForEach(setting.options) { Text($0.title).tag(Optional($0.index)) }
+            }
+            .labelsHidden().fixedSize()
+            .disabled(!controller.canWrite || setting.selectedIndex == nil)
+            Text("The headphones may reconnect after a change. Assistant setup requires your phone.")
+                .font(.caption11).foregroundStyle(Theme.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let guide = XM3AssistantGuide.selected(setting: setting, model: controller.state.modelName) {
+                Button("Set Up \(guide.title)…") { assistantGuide = guide }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sheet(item: $assistantGuide) { AssistantSetupView(guide: $0) }
+    }
+}
+
 extension ButtonFunction {
     var assignmentDetail: String {
         switch self {
         case .ambientSoundControl: "Press: Noise Canceling ↔ Ambient. Hold: NC Optimizer."
-        case .googleAssistant: "Talk to Google Assistant (requires the assistant on your phone)."
+        case .googleAssistant: "Talk to Google Assistant (requires setup on an Android phone)."
         case .amazonAlexa: "Talk to Alexa (requires the Alexa app on your phone)."
+        case .tencentXiaowei: "Talk to Tencent Xiaowei (requires its phone app and supported service region)."
         default: ""
         }
     }
@@ -251,9 +292,29 @@ struct VoiceGuidanceCard: View {
         let state = controller.state
         Card("Voice Guidance", symbol: "speaker.wave.2.bubble") {
             VStack(spacing: 14) {
-                SettingRow(symbol: "text.bubble", title: "Voice Guidance",
-                           detail: nil) {
-                    OnOff(value: state.voiceGuidance) { controller.apply(.voiceGuidance($0)) }
+                if state.capabilities.voiceGuidance {
+                    SettingRow(symbol: "text.bubble", title: "Voice Guidance", detail: nil) {
+                        OnOff(value: state.voiceGuidance) { controller.apply(.voiceGuidance($0)) }
+                            .disabled(state.family == .v1 && state.voiceGuidanceDetails.onOffAvailable != true)
+                    }
+                }
+                if let capability = state.capabilities.voiceGuidanceCapability, capability.supportsLanguage {
+                    if state.capabilities.voiceGuidance { RowDivider() }
+                    SettingRow(symbol: "globe", title: "Guidance Language",
+                               detail: "Changing language requires a downloaded voice package. Open Voice Language Packages to review experimental installation.") {
+                        Text(state.voiceGuidanceDetails.language?.title ?? "Not reported")
+                            .foregroundStyle(.secondary)
+                            .accessibilityValue(Text(state.voiceGuidanceDetails.language?.title ?? "Not reported"))
+                    }
+                    DisclosureGroup("Languages reported by these headphones") {
+                        Text(capability.languages.map(\.title).joined(separator: ", "))
+                            .font(.callout).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 6)
+                    }
+                    if state.family == .v1 && state.modelName == "WH-1000XM3" {
+                        Button("Voice Language Packages…") { controller.guidancePackages.open() }
+                    }
                 }
                 if let range = state.capabilities.voiceGuidanceVolume, let volume = state.voiceGuidanceVolume {
                     RowDivider()
@@ -275,19 +336,24 @@ struct OptimizerCard: View {
         let state = controller.state
         Card("NC Optimizer", symbol: "dial.medium") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Wear the headphones first. Plays test tones for about 15 seconds.")
+                Text(instructions)
                     .font(.caption11).foregroundStyle(Theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 12) {
                     switch state.optimizer {
-                    case .running:
+                    case .running, .measuringPersonal, .measuringPressure:
                         ProgressView().controlSize(.small)
-                        Text("Optimizing…").font(.label).foregroundStyle(Theme.text)
+                        Text(state.optimizer.title).font(.label).foregroundStyle(Theme.text)
                         Spacer()
                         Button("Cancel") { controller.cancelNoiseOptimizer() }
-                    case .finished, .idle:
+                            .disabled(!controller.canCancelNoiseOptimizer)
+                    case .finished, .idle, .unknown:
                         if state.optimizer == .finished {
-                            Label("Optimized", systemImage: "checkmark.circle.fill").font(.label).foregroundStyle(Theme.good)
+                            Label(state.optimizer.title, systemImage: "checkmark.circle.fill").font(.label).foregroundStyle(Theme.good)
+                        } else if state.optimizerAvailable != true || !state.optimizer.canStart {
+                            Text("Optimizer unavailable").font(.label).foregroundStyle(Theme.secondary)
+                        } else if state.optimizerPersonalMeasured == true {
+                            Text("Personal fit measured").font(.label).foregroundStyle(Theme.text)
                         }
                         if let pressure = state.optimizerMeasuredPressure, (7...10).contains(pressure) {
                             Text("Air pressure \(String(format: "%.1f", Double(pressure) / 10)) atm")
@@ -300,7 +366,7 @@ struct OptimizerCard: View {
                         .buttonStyle(.borderedProminent)
                         .tint(Theme.accent)
                         .foregroundStyle(Theme.onAccent)
-                        .disabled(!controller.canWrite)
+                        .disabled(!controller.canStartNoiseOptimizer)
                     }
                 }
             }
@@ -311,6 +377,13 @@ struct OptimizerCard: View {
         } message: {
             Text("Put the headphones on first. They will play test tones while measuring.")
         }
+    }
+
+    private var instructions: String {
+        if let seconds = controller.state.capabilities.ncOptimizerCapability?.estimatedSeconds, seconds > 0 {
+            return "Wear the headphones first. Plays test tones for about \(seconds) seconds."
+        }
+        return "Wear the headphones first. Plays test tones while measuring."
     }
 }
 
@@ -331,10 +404,11 @@ struct DeviceInfoCard: View {
                 }
             }
             HStack(spacing: 10) {
-                if controller.canWrite {
-                    Button("Refresh") { controller.refreshStatus() }
+                if controller.isConnected {
+                    Button("Refresh") { controller.refreshStatus() }.disabled(!controller.canWrite)
                     Button("Disconnect Controls") { controller.disconnect() }
                         .help("Closes OpenXM's control channel only; audio stays connected.")
+                        .disabled(controller.isReplay || controller.settingsOperationInProgress || controller.firmwareOperationInProgress)
                 } else if let address = controller.selectedAddress, !controller.isReplay {
                     Button("Connect") { controller.connect(address: address, initiate: true) }
                 }

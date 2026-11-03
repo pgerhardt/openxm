@@ -21,7 +21,9 @@ struct MenuBarView: View {
                     if controller.isConnected {
                         HStack(spacing: 8) {
                             BatteryLabel(battery: state.battery)
-                            if let codec = state.codec, codec != .unsettled { Badge(text: codec.title, tint: Theme.secondary) }
+                            let audio = controller.audioConnectionPresentation
+                            Badge(text: audio.badge, tint: audio.hasMicWarning ? Theme.warning : Theme.secondary)
+                                .help("Music codec: \(audio.codecLabel). \(audio.headline).")
                         }
                     } else {
                         Text(statusText).font(.caption11).foregroundStyle(Theme.secondary)
@@ -34,7 +36,20 @@ struct MenuBarView: View {
                 ReplayNotice(compact: true)
             }
 
+            if !controller.isReplay, let message = controller.codecTransport.message {
+                Text(message).font(.caption11).foregroundStyle(Theme.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if controller.codecTransport.playbackBlocked {
+                    Button("Restore audio anyway") { controller.codecTransport.recoverIfNeeded(allowPlaying: true) }
+                        .disabled(controller.codecTransport.isEngaged || controller.codecTransport.recoveringOutput)
+                }
+            }
+
             if controller.isConnected {
+                if state.family == .v1, state.capabilities.noise != nil, state.noiseAvailable != true {
+                    Text(state.noiseAvailable == false ? "Ambient sound control is unavailable." : "Waiting for ambient sound availability…")
+                        .font(.caption11).foregroundStyle(Theme.secondary)
+                }
                 if let cap = state.capabilities.noise, let noise = state.noise {
                     HStack(spacing: 0) {
                         ForEach(cap.modes) { mode in
@@ -47,14 +62,14 @@ struct MenuBarView: View {
                                     if entering { value.ambientLevel = level }
                                 }
                             }
-                            .disabled(!controller.canWrite)
+                            .disabled(!controller.canAdjustNoise)
                             .frame(maxWidth: .infinity)
                         }
                     }
                     if noise.mode == .ambient, cap.ambientRange.count > 1 {
                         HStack(spacing: 10) {
                             Image(systemName: "ear").font(.system(size: 11)).foregroundStyle(Theme.secondary)
-                            LevelSlider(value: noise.ambientLevel, range: cap.ambientRange, enabled: controller.canWrite,
+                            LevelSlider(value: noise.ambientLevel, range: cap.ambientRange, enabled: controller.canAdjustNoise,
                                         accessibilityName: "Ambient sound level",
                                         onDrag: { controller.dragAmbientLevel($0) },
                                         onCommit: { level in controller.requestNoise { $0.ambientLevel = level } })
@@ -66,7 +81,7 @@ struct MenuBarView: View {
                                           isOn: Binding(get: { noise.focusOnVoice }, set: { on in
                                               controller.requestNoise { $0.focusOnVoice = on }
                                           }))
-                                .disabled(!controller.canWrite)
+                                .disabled(!controller.canAdjustNoise)
                         }
                     }
                 }
@@ -84,7 +99,7 @@ struct MenuBarView: View {
                             }
                             .labelsHidden()
                             .fixedSize()
-                            .disabled(!controller.canWrite)
+                            .disabled(!controller.canWrite || state.equalizerAvailable != true)
                         }
                     }
                     if let name = state.capabilities.upscalingName {

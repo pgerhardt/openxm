@@ -9,6 +9,8 @@ struct SoundScene: Identifiable, Codable, Equatable {
     var tint: SceneTint
     var noise: SceneNoise?
     var equalizer: SceneEqualizer?
+    var surroundPreset: UInt8?
+    var soundPosition: SoundPosition?
     var upscaling: Bool?
     var speakToChat: Bool?
     var autoPause: Bool?
@@ -19,7 +21,8 @@ struct SoundScene: Identifiable, Codable, Equatable {
     var lastResult: SceneResult?
 
     var isEmpty: Bool {
-        noise == nil && equalizer == nil && upscaling == nil && speakToChat == nil && autoPause == nil && generalSettings.isEmpty
+        noise == nil && equalizer == nil && surroundPreset == nil && soundPosition == nil
+            && upscaling == nil && speakToChat == nil && autoPause == nil && generalSettings.isEmpty
     }
 
     /// Changes this scene would make on a headset with the given capabilities, in application order. Each inner
@@ -31,7 +34,7 @@ struct SoundScene: Identifiable, Codable, Equatable {
         var skipped: [String] = []
         let caps = state.capabilities
         if let noise {
-            if let cap = caps.noise, cap.modes.contains(noise.mode) {
+            if let cap = caps.noise, state.noiseControlAvailable, cap.modes.contains(noise.mode) {
                 var value = state.noise ?? NoiseControl(mode: noise.mode, ambientLevel: noise.ambientLevel, focusOnVoice: noise.focusOnVoice)
                 value.mode = noise.mode
                 value.ambientLevel = max(cap.ambientRange.lowerBound, min(cap.ambientRange.upperBound, noise.ambientLevel))
@@ -49,7 +52,7 @@ struct SoundScene: Identifiable, Codable, Equatable {
                 skipped.append("Equalizer preset")
             }
         case .custom(let bands, let clearBass)?:
-            if let cap = caps.equalizer, cap.bandCount == bands.count, let manual = cap.presets.first(where: \.isEditable) {
+            if let cap = caps.equalizer, cap.supportsBandEditing, cap.bandCount == bands.count, let manual = cap.presets.first(where: \.isEditable) {
                 changes.append([.equalizerPreset(manual.id),
                                 .equalizerBands(bands: bands, clearBass: cap.hasClearBass ? clearBass : nil)])
             } else {
@@ -57,6 +60,16 @@ struct SoundScene: Identifiable, Codable, Equatable {
             }
         case nil:
             break
+        }
+        if let surroundPreset {
+            if caps.surroundPresets.contains(where: { $0.id == surroundPreset }) {
+                changes.append([.surroundPreset(surroundPreset)])
+            } else { skipped.append("Surround (VPT)") }
+        }
+        if let soundPosition {
+            if caps.soundPositions.contains(soundPosition) {
+                changes.append([.soundPosition(soundPosition)])
+            } else { skipped.append("Sound Position Control") }
         }
         if let upscaling {
             if caps.upscalingName != nil { changes.append([.upscaling(upscaling)]) } else { skipped.append("DSEE") }
@@ -89,6 +102,8 @@ struct SoundScene: Identifiable, Codable, Equatable {
         case nil: break
         }
         if let upscaling { parts.append("DSEE \(upscaling ? "on" : "off")") }
+        if let surroundPreset { parts.append("Surround: \(SurroundPreset.displayName(for: surroundPreset))") }
+        if let soundPosition { parts.append("Position: \(soundPosition.title)") }
         if let speakToChat { parts.append("Speak-to-Chat \(speakToChat ? "on" : "off")") }
         if let autoPause { parts.append("Auto-pause \(autoPause ? "on" : "off")") }
         for (key, value) in generalSettings.sorted(by: { $0.key < $1.key }) {
@@ -109,6 +124,8 @@ struct SoundScene: Identifiable, Codable, Equatable {
             scene.equalizer = editable ? .custom(bands: eq.bands, clearBass: eq.clearBass) : .preset(eq.presetID)
         }
         scene.upscaling = state.upscaling?.enabled
+        scene.surroundPreset = state.surroundPreset
+        scene.soundPosition = state.soundPosition
         scene.speakToChat = state.speakToChat?.enabled
         scene.autoPause = state.autoPause
         for setting in state.generalSettings where setting.isBoolean && setting.key == "TOUCH_PANEL_SETTING" {
@@ -157,6 +174,7 @@ enum SceneTrigger: Codable, Equatable {
     case onConnect
     case schedule(SceneSchedule)
     case appActivated(bundleID: String, appName: String)
+    case location(SceneLocationTrigger)
 
     var title: String {
         switch self {
@@ -164,6 +182,7 @@ enum SceneTrigger: Codable, Equatable {
         case .onConnect: "When headphones connect"
         case .schedule(let schedule): "\(schedule.daysText) at \(schedule.timeText)"
         case .appActivated(_, let name): "When \(name) is active"
+        case .location(let place): place.title
         }
     }
 
@@ -173,10 +192,22 @@ enum SceneTrigger: Codable, Equatable {
         case .onConnect: "headphones"
         case .schedule: "clock"
         case .appActivated: "macwindow"
+        case .location: "location"
         }
     }
 
     var isAutomatic: Bool { self != .manual }
+    var isValid: Bool {
+        switch self {
+        case .manual, .onConnect: return true
+        case .location(let place): return place.isValid
+        case .schedule(let schedule):
+            return (0...23).contains(schedule.hour) && (0...59).contains(schedule.minute)
+                && !schedule.weekdays.isEmpty && schedule.weekdays.allSatisfy { (1...7).contains($0) }
+        case .appActivated(let bundleID, let name):
+            return !bundleID.isEmpty && bundleID.count <= 255 && !name.isEmpty && name.count <= 200
+        }
+    }
 }
 
 struct SceneResult: Codable, Equatable {

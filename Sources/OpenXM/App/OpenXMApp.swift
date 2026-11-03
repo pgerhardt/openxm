@@ -84,6 +84,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             scenes.startAutomation()
         }
         updates.startAutomaticChecks()
+        for event in [NSWorkspace.willSleepNotification, NSWorkspace.didWakeNotification] {
+            NSWorkspace.shared.notificationCenter.addObserver(forName: event, object: nil, queue: .main) { [weak self] note in
+                MainActor.assumeIsolated {
+                    self?.controller.stopListeningSamples()
+                    if note.name == NSWorkspace.willSleepNotification { self?.controller.codecTransport.stop() }
+                    if note.name == NSWorkspace.didWakeNotification { self?.controller.refreshStatus() }
+                }
+            }
+        }
         SnapshotRunner.runIfRequested(navigation: navigation, controller: controller, scenes: scenes, curves: curves)
         if !startsInBackground { sizeMainWindowOnFirstLaunch() }
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
@@ -157,7 +166,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         // Keep running for the menu bar controls and scene automations.
-        !Self.showsMenuBarExtra
+        !Self.showsMenuBarExtra && !controller.firmwareUpdate.isInstalling
+            && !controller.guidancePackages.isInstalling && !controller.settingsBackup.changesHeadphones
+            && !controller.equalizerGuide.reserved && !controller.equalizerGuide.busy
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard controller.firmwareUpdate.isInstalling || controller.guidancePackages.isInstalling
+            || controller.settingsBackup.changesHeadphones || controller.equalizerGuide.reserved
+            || controller.equalizerGuide.busy else {
+                if controller.codecTransport.isEngaged {
+                    controller.codecTransport.stop { sender.reply(toApplicationShouldTerminate: true) }
+                    return .terminateLater
+                }
+                return .terminateNow
+            }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        if controller.firmwareUpdate.isInstalling {
+            alert.messageText = "Firmware installation is still running"
+            alert.informativeText = "Quitting can interrupt installation and leave the headphones unusable. The session record will be retained, but recovery is not established. Keep OpenXM running until version verification finishes."
+        } else if controller.guidancePackages.isInstalling {
+            alert.messageText = "A voice-language update operation is still running"
+            alert.informativeText = "Quitting can interrupt language installation or cleanup. The session record will be retained, but interrupted-transfer recovery has not been verified on hardware. Keep OpenXM running until the language and normal update mode are verified."
+        } else if controller.equalizerGuide.reserved || controller.equalizerGuide.busy {
+            alert.messageText = "An equalizer comparison needs cleanup"
+            alert.informativeText = "Use Cancel & Restore in Find Your Equalizer before quitting. If you quit now, the recovery file stays on this Mac so the original EQ can be restored after reconnecting."
+        } else {
+            alert.messageText = "A settings operation is still running"
+            alert.informativeText = "Quitting can leave a restore unfinished or interrupt restoration of the EQ selection after a custom-curve read. Use Stop in Backup & Restore and wait for its result before quitting."
+        }
+        alert.addButton(withTitle: "Keep OpenXM Running")
+        alert.addButton(withTitle: "Quit Anyway")
+        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

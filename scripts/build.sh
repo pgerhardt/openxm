@@ -30,6 +30,8 @@ swift build -c "$CONFIG" --product OpenXMArtwork
 BIN=$(swift build -c "$CONFIG" --show-bin-path)
 echo "==> Local Now Playing helper"
 "$ROOT/scripts/build-mediaremote.sh"
+echo "==> Experimental Bluetooth codec helper and audio driver (build only)"
+"$ROOT/scripts/build-codec-transport.sh"
 
 echo "==> Assembling bundle"
 rm -rf "$APP"
@@ -43,10 +45,27 @@ cp "$ROOT/Resources/Models/WH-1000XM4.usdz" "$APP/Contents/Resources/"
 cp "$ROOT/Resources/Models/WH-1000XM4.png" "$APP/Contents/Resources/"
 cp "$ROOT/LICENSE" "$APP/Contents/Resources/LICENSE"
 cp "$ROOT/THIRD_PARTY_NOTICES.md" "$APP/Contents/Resources/THIRD_PARTY_NOTICES.md"
+cp "$ROOT/Vendor/MDRProxy/LICENSE" "$APP/Contents/Resources/MDRProxy-LICENSE"
 mkdir -p "$APP/Contents/Frameworks"
 ditto "$ROOT/build/MediaRemoteAdapter.framework" "$APP/Contents/Frameworks/MediaRemoteAdapter.framework"
 cp "$ROOT/Vendor/MediaRemoteAdapter/bin/mediaremote-adapter.pl" "$APP/Contents/Resources/"
 cp "$ROOT/Vendor/MediaRemoteAdapter/LICENSE" "$APP/Contents/Resources/MediaRemoteAdapter-LICENSE"
+cp "$ROOT/build/CodecTransport/OpenXMCodecTransport" "$APP/Contents/MacOS/"
+cp "$ROOT/build/CodecTransport/Frameworks/libfreeaptx.dylib" "$APP/Contents/Frameworks/"
+ditto "$ROOT/build/CodecTransport/OpenXMCodec.driver" "$APP/Contents/Resources/OpenXMCodec.driver"
+cp "$ROOT/scripts/install-codec-driver.sh" "$APP/Contents/Resources/"
+codesign -d --verbose=4 "$APP/Contents/Resources/OpenXMCodec.driver" 2>&1 | sed -n 's/^CDHash=//p' > "$APP/Contents/Resources/CodecDriverCDHash.txt"
+mkdir -p "$APP/Contents/Resources/CodecLicenses"
+cp "$ROOT/Vendor/BlueBloom/LICENSE" "$APP/Contents/Resources/CodecLicenses/BlueBloom-MIT.txt"
+cp "$ROOT/Vendor/BlueBloom/OPENXM-PROVENANCE.md" "$APP/Contents/Resources/CodecLicenses/"
+cp "$ROOT/Vendor/BlueBloom/third_party/README.md" "$APP/Contents/Resources/CodecLicenses/Components.md"
+for component in libldac libfreeaptx sbc; do
+  mkdir -p "$APP/Contents/Resources/CodecLicenses/$component"
+  for notice in LICENSE NOTICE COPYING VERSION; do
+    codec_notice_source="$ROOT/Vendor/BlueBloom/third_party/$component/$notice"
+    if [[ -f "$codec_notice_source" ]]; then cp "$codec_notice_source" "$APP/Contents/Resources/CodecLicenses/$component/"; fi
+  done
+done
 
 echo "==> App icon"
 "$BIN/OpenXMArtwork" icon "$ROOT/build/AppIcon.iconset"
